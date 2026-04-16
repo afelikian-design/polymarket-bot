@@ -25,9 +25,9 @@ class Config:
     MAX_DRAWDOWN        = -0.20
 
     MIN_GAP             = 0.07
-    MIN_HOURS           = 4
+    MIN_HOURS           = 1
     MAX_HOURS           = 168
-    MIN_VOLUME          = 50_000
+    MIN_VOLUME          = 1_000
 
     CLAUDE_MODEL        = "claude-opus-4-5"
     MIN_CONFIDENCE      = 75
