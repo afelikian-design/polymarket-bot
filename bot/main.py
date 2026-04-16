@@ -97,91 +97,26 @@ def log_agent(agent, status, message):
 def run_scanner():
     log_agent("scanner", "running", "Scanning Polymarket markets...")
     try:
-        from py_clob_client.client import ClobClient
+        import requests
         from datetime import timezone
-        client = ClobClient(host=Config.CLOB_HOST, chain_id=Config.CHAIN_ID)
 
-        response = client.get_markets()
-        if isinstance(response, dict):
-            markets = response.get("data", [])
-        elif isinstance(response, list):
-            markets = response
-        else:
-            markets = []
+        url = "https://gamma-api.polymarket.com/markets"
+        params = {
+            "active": "true",
+            "closed": "false",
+            "limit": 100,
+            "order": "volume",
+            "ascending": "false"
+        }
+        response = requests.get(url, params=params, timeout=30)
+        markets = response.json()
 
         if not markets:
-            log_agent("scanner", "idle", "No markets returned from API")
+            log_agent("scanner", "idle", "No active markets found")
             return []
 
         scored = []
-        now = datetime.now(timezone.utc)
-
-        for m in markets[:Config.MAX_MARKETS_SCAN]:
-            try:
-                # Skip inactive or closed markets
-                if not m.get("active", False):
-                    continue
-                if m.get("closed", True):
-                    continue
-                if not m.get("accepting_orders", False):
-                    continue
-
-                condition_id = m.get("condition_id")
-                if not condition_id:
-                    continue
-
-                # Calculate hours to resolution
-                end_date = m.get("end_date_iso")
-                if not end_date:
-                    continue
-                try:
-                    end_dt = datetime.fromisoformat(end_date.replace("Z", "+00:00"))
-                    hours = (end_dt - now).total_seconds() / 3600
-                except Exception:
-                    continue
-
-                if hours < Config.MIN_HOURS or hours > Config.MAX_HOURS:
-                    continue
-
-                # Get price from tokens
-                tokens = m.get("tokens", [])
-                if not tokens:
-                    continue
-
-                try:
-                    mid = client.get_midpoint(condition_id)
-                    price = float(mid.get("mid", 0))
-                except Exception:
-                    continue
-
-                if price <= 0 or price >= 1:
-                    continue
-
-                scored.append({
-                    "condition_id": condition_id,
-                    "question": m.get("question", ""),
-                    "price": round(price, 4),
-                    "hours": round(hours, 1),
-                    "volume": 0,
-                    "gap": 0.0,
-                    "ev": 0.0,
-                })
-            except Exception:
-                continue
-
-        with open("queue.json", "w") as f:
-            json.dump(scored, f, indent=2)
-
-        msg = f"Scan complete: {len(scored)} markets passed (from {len(markets)} total)"
-        log_agent("scanner", "idle", msg)
-        logger.info(msg)
-        return scored
-
-    except Exception as e:
-        msg = f"Scanner error: {e}"
-        log_agent("scanner", "error", msg)
-        logger.error(msg)
-        return []
+        now =
 
 
 def run_brain():
