@@ -18,10 +18,9 @@ logging.basicConfig(
 )
 logger = logging.getLogger("main")
 
-# ─── Database ────────────────────────────────────────────────
 db = init_db(Config.DB_PATH)
 
-# ─── Portfolio tracker ───────────────────────────────────────
+
 class Portfolio:
     def __init__(self, db_session, initial_balance=1000.0):
         self.db = db_session
@@ -32,6 +31,7 @@ class Portfolio:
     def get_balance(self): return self._balance
     def get_peak_balance(self): return self._peak
     def get_start_of_day_balance(self): return self._start_of_day
+
     def get_open_count(self):
         from database import Position
         return self.db.query(Position).filter_by(status="OPEN").count()
@@ -46,7 +46,6 @@ class Portfolio:
         closed = self.db.query(Position).filter_by(status="CLOSED").all()
         daily_pnl = sum(p.pnl or 0 for p in closed)
         drawdown = (self._balance - self._peak) / self._peak if self._peak > 0 else 0
-
         snap = WalletSnapshot(
             balance=self._balance,
             open_pnl=round(open_pnl, 2),
@@ -57,9 +56,7 @@ class Portfolio:
         self.db.add(snap)
         self.db.commit()
 
-portfolio = Portfolio(db)
 
-# ─── Risk Engine ─────────────────────────────────────────────
 class RiskEngine:
     def __init__(self):
         self.trading_halted = False
@@ -74,34 +71,45 @@ class RiskEngine:
             daily_pct = (balance - start_balance) / start_balance
             if daily_pct < Config.DAILY_LOSS_LIMIT:
                 self.trading_halted = True
-                self.halt_reason = f"Daily loss limit hit: {daily_pct:.1%}"
+                self.halt_reason = f"Daily loss limit: {daily_pct:.1%}"
                 return False, self.halt_reason
         if peak_balance > 0:
             drawdown = (balance - peak_balance) / peak_balance
             if drawdown < Config.MAX_DRAWDOWN:
                 self.trading_halted = True
-                self.halt_reason = f"Max drawdown hit: {drawdown:.1%}"
+                self.halt_reason = f"Max drawdown: {drawdown:.1%}"
                 return False, self.halt_reason
         if balance > 0 and trade_size / balance > Config.MAX_POSITION_PCT:
             return False, "Position too large"
         return True, "OK"
 
+
+portfolio = Portfolio(db)
 risk = RiskEngine()
 
-# ─── Agent logging helper ─────────────────────────────────────
+
 def log_agent(agent, status, message):
     entry = AgentLog(agent=agent, status=status, message=message)
     db.add(entry)
     db.commit()
 
-# ─── Scanner ─────────────────────────────────────────────────
+
 def run_scanner():
     log_agent("scanner", "running", "Scanning Polymarket markets...")
     try:
         from py_clob_client.client import ClobClient
         client = ClobClient(host=Config.CLOB_HOST, chain_id=Config.CHAIN_ID)
 
-        markets = client.get_markets()
+        response = client.get_markets()
+
+        # Handle both list and dict responses
+        if isinstance(response, dict):
+            markets = response.get("data", [])
+        elif isinstance(response, list):
+            markets = response
+        else:
+            markets = []
+
         if not markets:
             log_agent("scanner", "idle", "No markets returned from API")
             return []
@@ -124,7 +132,7 @@ def run_scanner():
                 try:
                     mid = client.get_midpoint(condition_id)
                     price = float(mid.get("mid", 0))
-                except:
+                except Exception:
                     continue
 
                 if price <= 0 or price >= 1:
@@ -139,13 +147,13 @@ def run_scanner():
                     "gap": 0.0,
                     "ev": 0.0,
                 })
-            except Exception as e:
+            except Exception:
                 continue
 
         with open("queue.json", "w") as f:
             json.dump(scored, f, indent=2)
 
-        msg = f"Scan complete: {len(scored)} markets passed filters (from {len(markets)} total)"
+        msg = f"Scan complete: {len(scored)} markets passed (from {len(markets)} total)"
         log_agent("scanner", "idle", msg)
         logger.info(msg)
         return scored
@@ -156,9 +164,9 @@ def run_scanner():
         logger.error(msg)
         return []
 
-# ─── Brain ───────────────────────────────────────────────────
+
 def run_brain():
-    log_agent("brain", "running", "Evaluating market queue with Claude...")
+    log_agent("brain", "running", "Evaluating markets with Claude...")
     try:
         import anthropic
 
@@ -166,7 +174,7 @@ def run_brain():
             with open("queue.json") as f:
                 queue = json.load(f)
         except FileNotFoundError:
-            log_agent("brain", "idle", "No queue.json — run scanner first")
+            log_agent("brain", "idle", "No queue.json — scanner hasn't run yet")
             return []
 
         if not queue:
@@ -176,7 +184,7 @@ def run_brain():
         claude = anthropic.Anthropic(api_key=Config.ANTHROPIC_API_KEY)
         theses = []
 
-        for market in queue[:20]:  # limit to 20 per cycle to manage API costs
+        for market in queue[:20]:
             try:
                 prompt = f"""Evaluate this prediction market for a trading opportunity.
 
@@ -185,7 +193,7 @@ Current price: {market['price']} (implies {round(market['price']*100)}% probabil
 Hours until resolution: {market['hours']}
 Volume: ${market['volume']:,.0f}
 
-Analyze for mispricing. Respond ONLY with valid JSON:
+Analyze for mispricing. Respond ONLY with valid JSON, no markdown:
 {{
   "our_probability": 0.XX,
   "market_price": {market['price']},
@@ -217,8 +225,7 @@ Set action=SKIP if edge < 0.07 or confidence < 70."""
                 result["question"] = market["question"]
                 theses.append(result)
                 logger.info(f"THESIS: {market['question'][:60]} | Conf: {result.get('confidence')} | Edge: {result.get('edge', 0):.3f}")
-
-                time.sleep(0.5)  # rate limit
+                time.sleep(0.5)
 
             except Exception as e:
                 logger.debug(f"Brain failed on market: {e}")
@@ -238,7 +245,7 @@ Set action=SKIP if edge < 0.07 or confidence < 70."""
         logger.error(msg)
         return []
 
-# ─── Executor ────────────────────────────────────────────────
+
 def kelly_size(p_win, market_price, bankroll):
     if not (0 < market_price < 1) or not (0 < p_win < 1):
         return 0.0
@@ -249,8 +256,9 @@ def kelly_size(p_win, market_price, bankroll):
         return 0.0
     return round(bankroll * min(f, Config.MAX_KELLY_FRACTION), 2)
 
+
 def run_executor():
-    log_agent("executor", "running", "Checking theses for trade execution...")
+    log_agent("executor", "running", "Checking theses for execution...")
     try:
         from database import Position, Trade
 
@@ -269,7 +277,6 @@ def run_executor():
             if not condition_id:
                 continue
 
-            # Skip if already in position
             existing = db.query(Position).filter_by(
                 id=condition_id, status="OPEN"
             ).first()
@@ -297,15 +304,9 @@ def run_executor():
                 logger.warning(f"Risk block: {reason}")
                 continue
 
-            if Config.PAPER_TRADING:
-                order_id = f"PAPER-{condition_id[:8]}-{int(datetime.utcnow().timestamp())}"
-                logger.info(f"[PAPER] BUY ${size} @ {thesis.get('market_price')} | {thesis.get('question', '')[:50]}")
-            else:
-                # Live trading — requires funded wallet
-                logger.info(f"[LIVE] Would place order — live trading not yet enabled")
-                continue
+            order_id = f"PAPER-{condition_id[:8]}-{int(datetime.utcnow().timestamp())}"
+            logger.info(f"[PAPER] BUY ${size} @ {thesis.get('market_price')} | {thesis.get('question', '')[:50]}")
 
-            # Save position
             position = Position(
                 id=condition_id,
                 question=thesis.get("question", ""),
@@ -341,7 +342,7 @@ def run_executor():
         log_agent("executor", "error", msg)
         logger.error(msg)
 
-# ─── Exit Monitor ────────────────────────────────────────────
+
 def run_exit_monitor():
     log_agent("exit_monitor", "running", "Checking exit conditions...")
     try:
@@ -354,29 +355,22 @@ def run_exit_monitor():
 
         for pos in open_positions:
             try:
-                # Update current price
                 mid = client.get_midpoint(pos.id)
                 current_price = float(mid.get("mid", pos.current_price))
                 pos.current_price = current_price
                 db.commit()
 
                 hours_held = (datetime.utcnow() - pos.opened_at).total_seconds() / 3600
-
                 should_exit = False
                 exit_reason = ""
 
-                # Target hit
                 target = pos.entry_price + (pos.expected_gap * Config.TARGET_CAPTURE)
                 if current_price >= target:
                     should_exit = True
                     exit_reason = "TARGET_HIT"
-
-                # Stop loss
                 elif current_price <= pos.entry_price * 0.75:
                     should_exit = True
                     exit_reason = "STOP_LOSS"
-
-                # Stale thesis
                 elif hours_held > Config.STALE_HOURS:
                     if abs(current_price - pos.entry_price) < Config.STALE_THRESHOLD:
                         should_exit = True
@@ -389,7 +383,6 @@ def run_exit_monitor():
                     pos.exit_reason = exit_reason
                     pos.closed_at = datetime.utcnow()
                     pos.pnl = round(pnl, 2)
-
                     trade = Trade(
                         condition_id=pos.id,
                         side="SELL",
@@ -407,7 +400,7 @@ def run_exit_monitor():
                 logger.debug(f"Exit check failed for {pos.id}: {e}")
                 continue
 
-        msg = f"Exit check: {exits} closed, {len(open_positions)-exits} still open"
+        msg = f"Exit check: {exits} closed, {len(open_positions)-exits} open"
         log_agent("exit_monitor", "idle", msg)
 
     except Exception as e:
@@ -415,43 +408,45 @@ def run_exit_monitor():
         log_agent("exit_monitor", "error", msg)
         logger.error(msg)
 
-# ─── Whale Monitor (placeholder) ────────────────────────────
-def run_whale_monitor():
-    log_agent("whale_monitor", "idle", f"Monitoring {Config.MAX_MARKETS_SCAN} markets for whale activity")
 
-# ─── Main Orchestrator ────────────────────────────────────────
+def run_whale_monitor():
+    log_agent("whale_monitor", "idle", "Monitoring markets for whale activity")
+
+
 def main():
     logger.info("=" * 50)
     logger.info(f"POLYBOT STARTING — {'PAPER' if Config.PAPER_TRADING else '*** LIVE ***'}")
     logger.info("=" * 50)
 
-    # Start Flask API in background thread
     api_thread = threading.Thread(
-        target=lambda: app.run(host=Config.API_HOST, port=Config.API_PORT, debug=False, use_reloader=False),
+        target=lambda: app.run(
+            host=Config.API_HOST,
+            port=Config.API_PORT,
+            debug=False,
+            use_reloader=False
+        ),
         daemon=True
     )
     api_thread.start()
     logger.info(f"API running on port {Config.API_PORT}")
 
-    # Run immediately on startup
+    log_agent("scanner", "idle", "Bot started")
+    log_agent("brain", "idle", "Bot started")
+    log_agent("executor", "idle", "Bot started")
+    log_agent("exit_monitor", "idle", "Bot started")
+    log_agent("whale_monitor", "idle", "Bot started")
+
     logger.info("Running initial scan...")
     run_scanner()
     run_brain()
     run_executor()
 
-    # Schedule recurring jobs
     schedule.every(Config.SCAN_INTERVAL_SEC).seconds.do(run_scanner)
     schedule.every(Config.BRAIN_INTERVAL_SEC).seconds.do(run_brain)
     schedule.every(Config.BRAIN_INTERVAL_SEC).seconds.do(run_executor)
     schedule.every(Config.EXIT_CHECK_SEC).seconds.do(run_exit_monitor)
     schedule.every(5).minutes.do(portfolio.snapshot)
     schedule.every(60).minutes.do(run_whale_monitor)
-
-    log_agent("scanner", "idle", "Bot started — waiting for first scan")
-    log_agent("brain", "idle", "Bot started — waiting for first evaluation")
-    log_agent("executor", "idle", "Bot started — waiting for first execution")
-    log_agent("exit_monitor", "idle", "Bot started — watching for exits")
-    log_agent("whale_monitor", "idle", "Bot started — whale monitor active")
 
     logger.info("All agents scheduled. Bot running 24/7.")
 
@@ -460,7 +455,8 @@ def main():
             schedule.run_pending()
             time.sleep(1)
     except KeyboardInterrupt:
-        logger.info("Bot stopped by user")
+        logger.info("Bot stopped")
+
 
 if __name__ == "__main__":
     main()
