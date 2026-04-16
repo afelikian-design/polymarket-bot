@@ -155,7 +155,7 @@ export default function Dashboard() {
   };
 
   return (
-    <div style={{background:"#07090c",minHeight:"100vh",fontFamily:"'DM Mono',monospace",color:"#b0c8d4",overflow:"hidden"}}>
+    <div style={{background:"#07090c",minHeight:"100vh",fontFamily:"'DM Mono',monospace",color:"#ffffff",overflow:"hidden"}}>
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&display=swap');
         *{box-sizing:border-box;margin:0;padding:0}
