@@ -1,1 +1,12 @@
-
+.env
+*.db
+__pycache__/
+venv/
+node_modules/
+.DS_Store
+targets.json
+thesis.json
+queue.json
+bot.log
+logs/
+build/
