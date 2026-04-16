@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, ReferenceLine } from "recharts";
 
-const API_BASE = "https://revolutionary-jesus-truck-drum.trycloudflare.com";
+const API_BASE = "https://cutting-instrumental-distributors-disclosure.trycloudflare.com";
 
 const generatePnL = () => {
   const data = []; let bal = 1000;
