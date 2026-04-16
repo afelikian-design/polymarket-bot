@@ -18,4 +18,26 @@ class Config:
 
     MAX_KELLY_FRACTION  = 0.10
     MIN_KELLY_FRACTION  = 0.01
-    MAX_
+    MAX_OPEN_POSITIONS  = 10
+    MAX_POSITION_PCT    = 0.15
+    MIN_LIQUIDITY       = 500
+    DAILY_LOSS_LIMIT    = -0.10
+    MAX_DRAWDOWN        = -0.20
+
+    MIN_GAP             = 0.07
+    MIN_HOURS           = 4
+    MAX_HOURS           = 168
+    MIN_VOLUME          = 50_000
+
+    CLAUDE_MODEL        = "claude-opus-4-5"
+    MIN_CONFIDENCE      = 75
+    CONSENSUS_THRESHOLD = 2
+
+    TARGET_CAPTURE      = 0.85
+    VOLUME_SPIKE_MULT   = 3.0
+    STALE_HOURS         = 24
+    STALE_THRESHOLD     = 0.02
+
+    API_HOST            = "0.0.0.0"
+    API_PORT            = 5000
+    DB_PATH             = "bot.db"
