@@ -98,11 +98,10 @@ def run_scanner():
     log_agent("scanner", "running", "Scanning Polymarket markets...")
     try:
         from py_clob_client.client import ClobClient
+        from datetime import timezone
         client = ClobClient(host=Config.CLOB_HOST, chain_id=Config.CHAIN_ID)
 
         response = client.get_markets()
-
-        # Handle both list and dict responses
         if isinstance(response, dict):
             markets = response.get("data", [])
         elif isinstance(response, list):
@@ -115,18 +114,38 @@ def run_scanner():
             return []
 
         scored = []
+        now = datetime.now(timezone.utc)
+
         for m in markets[:Config.MAX_MARKETS_SCAN]:
             try:
-                condition_id = m.get("condition_id") or m.get("id")
+                # Skip inactive or closed markets
+                if not m.get("active", False):
+                    continue
+                if m.get("closed", True):
+                    continue
+                if not m.get("accepting_orders", False):
+                    continue
+
+                condition_id = m.get("condition_id")
                 if not condition_id:
                     continue
 
-                hours = m.get("seconds_to_resolution", 0) / 3600
-                volume = float(m.get("volume", 0))
+                # Calculate hours to resolution
+                end_date = m.get("end_date_iso")
+                if not end_date:
+                    continue
+                try:
+                    end_dt = datetime.fromisoformat(end_date.replace("Z", "+00:00"))
+                    hours = (end_dt - now).total_seconds() / 3600
+                except Exception:
+                    continue
 
                 if hours < Config.MIN_HOURS or hours > Config.MAX_HOURS:
                     continue
-                if volume < Config.MIN_VOLUME:
+
+                # Get price from tokens
+                tokens = m.get("tokens", [])
+                if not tokens:
                     continue
 
                 try:
@@ -143,7 +162,7 @@ def run_scanner():
                     "question": m.get("question", ""),
                     "price": round(price, 4),
                     "hours": round(hours, 1),
-                    "volume": round(volume, 2),
+                    "volume": 0,
                     "gap": 0.0,
                     "ev": 0.0,
                 })
