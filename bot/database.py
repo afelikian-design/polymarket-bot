@@ -99,7 +99,15 @@ class WalletSnapshot(Base):
     peak_balance    = Column(Float)
     drawdown_pct    = Column(Float, default=0.0)
     snapshotted_at  = Column(DateTime, default=datetime.utcnow)
-
+class ActivityLog(Base):
+    __tablename__ = "activity_logs"
+    id          = Column(Integer, primary_key=True, autoincrement=True)
+    agent       = Column(String)
+    event_type  = Column(String)
+    market      = Column(Text)
+    message     = Column(Text)
+    detail      = Column(Text)
+    logged_at   = Column(DateTime, default=datetime.utcnow)
 def init_db(db_path: str):
     engine = create_engine(f"sqlite:///{db_path}", echo=False)
     Base.metadata.create_all(engine)
