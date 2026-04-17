@@ -2,7 +2,8 @@ from flask import Flask, jsonify
 from flask_cors import CORS
 from config import Config
 from database import (init_db, Position, Trade, AgentLog,
-                      WalletSnapshot, WhaleSignal, PrebuiltThesis)
+                      WalletSnapshot, WhaleSignal, PrebuiltThesis,
+                      ActivityLog)
 from datetime import datetime, timedelta
 
 app = Flask(__name__)
@@ -155,3 +156,28 @@ def control_halt():
 
 if __name__ == "__main__":
     app.run(host=Config.API_HOST, port=Config.API_PORT, debug=False)
+@app.route("/api/activity")
+def get_activity():
+    logs = db.query(ActivityLog)\
+        .order_by(ActivityLog.logged_at.desc()).limit(60).all()
+    return jsonify([{
+        "id":         l.id,
+        "agent":      l.agent,
+        "event_type": l.event_type,
+        "market":     l.market,
+        "message":    l.message,
+        "detail":     l.detail,
+        "logged_at":  l.logged_at.isoformat() if l.logged_at else None,
+        "time_ago":   _time_ago(l.logged_at),
+    } for l in logs])
+
+
+def _time_ago(dt):
+    if not dt:
+        return ""
+    secs = int((datetime.utcnow() - dt).total_seconds())
+    if secs < 60:
+        return "{}s ago".format(secs)
+    if secs < 3600:
+        return "{}m ago".format(secs // 60)
+    return "{}h ago".format(secs // 3600)
