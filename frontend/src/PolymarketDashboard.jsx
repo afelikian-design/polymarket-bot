@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, ReferenceLine } from "recharts";
 
 const API_BASE = "https://cutting-instrumental-distributors-disclosure.trycloudflare.com";
@@ -39,6 +39,17 @@ const TB = {1:"#1e1000",2:"#001222",3:"#0e1218"};
 const TL = {1:"ELITE",  2:"STRONG", 3:"WATCH" };
 const CC = {macro:"#a080f0",politics:"#e07888",crypto:"#00c8a0",other:"#5a7080"};
 
+// Event type config
+const ET = {
+  SCANNING:   { color: "#80c8e0", icon: "⟳", label: "SCAN"   },
+  EVALUATING: { color: "#a080f0", icon: "◈", label: "EVAL"   },
+  THESIS:     { color: "#00ff8c", icon: "✦", label: "THESIS" },
+  TRADE:      { color: "#f0c070", icon: "◆", label: "TRADE"  },
+  EXIT:       { color: "#e07888", icon: "✕", label: "EXIT"   },
+  SKIP:       { color: "#4a5868", icon: "–", label: "SKIP"   },
+  ERROR:      { color: "#ff4455", icon: "!", label: "ERROR"  },
+};
+
 const TierBadge = ({tier}) => (
   <span style={{fontSize:8,padding:"2px 6px",borderRadius:2,letterSpacing:".14em",background:TB[tier],color:TC[tier],border:`1px solid ${TC[tier]}28`,fontWeight:600}}>
     T{tier} {TL[tier]}
@@ -51,37 +62,25 @@ const CatBadge = ({cat}) => (
 );
 
 const fmtDuration = (secs) => {
-  const h = Math.floor(secs / 3600);
-  const m = Math.floor((secs % 3600) / 60);
-  const s = secs % 60;
+  const h = Math.floor(secs / 3600), m = Math.floor((secs % 3600) / 60), s = secs % 60;
   if (h > 0) return `${h}h ${String(m).padStart(2,"0")}m`;
   if (m > 0) return `${m}m ${String(s).padStart(2,"0")}s`;
   return `${s}s`;
 };
-
-const staleColor = (pct) => {
-  if (pct < 0.5)  return "#00a858";
-  if (pct < 0.75) return "#d4a020";
-  if (pct < 0.90) return "#e06020";
-  return "#ff4040";
-};
-
-const staleLabel = (pct) => {
-  if (pct < 0.5)  return null;
-  if (pct < 0.75) return "WATCH";
-  if (pct < 0.90) return "AGING";
-  return "STALE SOON";
-};
+const staleColor = pct => pct < 0.5 ? "#00a858" : pct < 0.75 ? "#d4a020" : pct < 0.9 ? "#e06020" : "#ff4040";
+const staleLabel = pct => pct < 0.5 ? null : pct < 0.75 ? "WATCH" : pct < 0.9 ? "AGING" : "STALE SOON";
 
 export default function Dashboard() {
-  const [pnlData] = useState(generatePnL);
+  const [pnlData]  = useState(generatePnL);
   const [tab, setTab]   = useState("positions");
   const [wTab, setWTab] = useState("leaderboard");
   const [elapsed, setElapsed] = useState(0);
   const [newSig, setNewSig]   = useState(false);
   const [sigTick, setSigTick] = useState(0);
   const [apiError, setApiError] = useState(false);
+  const activityRef = useRef(null);
 
+  // Real data
   const [portfolio, setPortfolio] = useState({
     balance:1000, daily_pnl:0, win_rate:0,
     open_positions:0, drawdown_pct:0, sharpe:0,
@@ -92,13 +91,17 @@ export default function Dashboard() {
   const [QUEUE, setQueue]         = useState([]);
   const [signals, setSignals]     = useState([]);
   const [agentData, setAgentData] = useState({
-    scanner:      {status:"idle", message:"Starting..."},
-    brain:        {status:"idle", message:"Starting..."},
-    executor:     {status:"idle", message:"Starting..."},
-    exit_monitor: {status:"idle", message:"Starting..."},
-    whale_monitor:{status:"idle", message:"Starting..."},
+    scanner:{status:"idle",message:"Starting..."},
+    brain:{status:"idle",message:"Starting..."},
+    executor:{status:"idle",message:"Starting..."},
+    exit_monitor:{status:"idle",message:"Starting..."},
+    whale_monitor:{status:"idle",message:"Starting..."},
   });
+  const [activity, setActivity]   = useState([]);
+  const [prevActivityId, setPrevActivityId] = useState(null);
+  const [newActivity, setNewActivity] = useState(false);
 
+  // Main data fetch — every 15s
   useEffect(() => {
     const fetchData = async () => {
       try {
@@ -127,21 +130,41 @@ export default function Dashboard() {
     return () => clearInterval(interval);
   }, []);
 
+  // Activity feed — every 5s
+  useEffect(() => {
+    const fetchActivity = async () => {
+      try {
+        const data = await fetch(`${API_BASE}/api/activity`).then(r=>r.json());
+        if (data.length > 0 && data[0].id !== prevActivityId) {
+          setNewActivity(true);
+          setPrevActivityId(data[0].id);
+          setTimeout(() => setNewActivity(false), 1000);
+        }
+        setActivity(data);
+      } catch(e) {
+        // activity feed failure is non-critical
+      }
+    };
+    fetchActivity();
+    const interval = setInterval(fetchActivity, 5000);
+    return () => clearInterval(interval);
+  }, [prevActivityId]);
+
+  // Live clock
   useEffect(() => {
     const t = setInterval(() => setElapsed(e => e+1), 1000);
     return () => clearInterval(t);
   }, []);
 
+  // Whale signal simulation
   useEffect(() => {
     const t = setInterval(() => setSigTick(x => x+1), 4000);
     return () => clearInterval(t);
   }, []);
-
   useEffect(() => {
     if (signals.length === 0 && sigTick > 0 && sigTick % 5 === 0) {
       const w = WHALES[Math.floor(Math.random()*WHALES.length)];
-      const ht = Math.random() > 0.35;
-      const fw = w.tier < 3 || ht;
+      const ht = Math.random() > 0.35, fw = w.tier < 3 || ht;
       setSignals(prev => [{
         wallet: w.address, tier: w.tier,
         question: FAKE_QS[Math.floor(Math.random()*FAKE_QS.length)],
@@ -155,9 +178,7 @@ export default function Dashboard() {
     }
   }, [sigTick]);
 
-  const p0 = pnlData[0]?.balance??1000;
-  const pN = pnlData[pnlData.length-1]?.balance??1000;
-  const pd = pN-p0;
+  const p0 = pnlData[0]?.balance??1000, pN = pnlData[pnlData.length-1]?.balance??1000, pd = pN-p0;
 
   return (
     <div style={{background:"#07090c",minHeight:"100vh",fontFamily:"'DM Mono',monospace",color:"#ffffff",overflow:"hidden"}}>
@@ -171,9 +192,12 @@ export default function Dashboard() {
         @keyframes blink{0%,100%{opacity:1}50%{opacity:0}}
         .slidein{animation:si .35s ease}
         @keyframes si{from{opacity:0;transform:translateY(-8px)}to{opacity:1;transform:translateY(0)}}
+        .flashrow{animation:fl .8s ease}
+        @keyframes fl{0%{background:rgba(0,255,140,.08)}100%{background:transparent}}
         .rh:hover{background:rgba(0,200,120,.025)!important}
         .tb{background:none;border:none;cursor:pointer;font-family:inherit}
         .timer-bar{transition:width .9s linear}
+        .feed-scroll::-webkit-scrollbar{width:2px}
       `}</style>
 
       {/* TOP BAR */}
@@ -249,6 +273,106 @@ export default function Dashboard() {
 
         {/* CENTER */}
         <div style={{display:"flex",flexDirection:"column",overflow:"hidden"}}>
+
+          {/* ── LIVE ACTIVITY FEED ─────────────────────────── */}
+          <div style={{
+            background:"#080b0f",
+            borderBottom:"1px solid #0c1c28",
+            flexShrink:0,
+            maxHeight:180,
+            display:"flex",
+            flexDirection:"column",
+          }}>
+            {/* Feed header */}
+            <div style={{
+              display:"flex",alignItems:"center",justifyContent:"space-between",
+              padding:"7px 14px",borderBottom:"1px solid #0c1c28",flexShrink:0
+            }}>
+              <div style={{display:"flex",alignItems:"center",gap:8}}>
+                <div style={{
+                  width:6,height:6,borderRadius:"50%",
+                  background:newActivity?"#00ff8c":"#304858",
+                  boxShadow:newActivity?"0 0 7px #00ff8c":"none",
+                  transition:"all .3s"
+                }} className={newActivity?"pulse":""}/>
+                <span style={{fontSize:8,color:"#8ab8c8",letterSpacing:".2em"}}>CLAUDE ACTIVITY FEED</span>
+                <span style={{fontSize:8,color:"#304858"}}>· refreshes every 5s</span>
+              </div>
+              <div style={{display:"flex",gap:8}}>
+                {Object.entries(ET).slice(0,5).map(([k,v])=>(
+                  <span key={k} style={{fontSize:7,color:v.color,letterSpacing:".1em"}}>
+                    {v.icon} {v.label}
+                  </span>
+                ))}
+              </div>
+            </div>
+
+            {/* Feed rows */}
+            <div
+              ref={activityRef}
+              className="feed-scroll"
+              style={{overflowY:"auto",flex:1,padding:"4px 0"}}
+            >
+              {activity.length === 0 ? (
+                <div style={{padding:"16px 14px",color:"#304858",fontSize:10,textAlign:"center"}}>
+                  Waiting for bot activity... (starts on next scan cycle)
+                </div>
+              ) : activity.map((log, i) => {
+                const et = ET[log.event_type] || ET.SCANNING;
+                return (
+                  <div key={log.id} className={i===0&&newActivity?"flashrow":""} style={{
+                    display:"flex",alignItems:"flex-start",gap:8,
+                    padding:"4px 14px",
+                    borderBottom:"1px solid #0a0c10",
+                    transition:"background .3s",
+                  }}>
+                    {/* Time */}
+                    <span style={{fontSize:8,color:"#243848",whiteSpace:"nowrap",marginTop:1,minWidth:52,fontVariantNumeric:"tabular-nums"}}>
+                      {log.logged_at ? new Date(log.logged_at).toLocaleTimeString([],{hour:"2-digit",minute:"2-digit",second:"2-digit"}) : ""}
+                    </span>
+
+                    {/* Event type badge */}
+                    <span style={{
+                      fontSize:7,padding:"1px 5px",borderRadius:2,letterSpacing:".12em",
+                      background:et.color+"18",color:et.color,
+                      whiteSpace:"nowrap",marginTop:1,minWidth:46,textAlign:"center",flexShrink:0
+                    }}>
+                      {et.icon} {et.label}
+                    </span>
+
+                    {/* Agent */}
+                    <span style={{fontSize:8,color:"#4a7080",whiteSpace:"nowrap",marginTop:1,minWidth:60,flexShrink:0}}>
+                      {log.agent?.replace(/_/g,"·")}
+                    </span>
+
+                    {/* Content */}
+                    <div style={{flex:1,minWidth:0}}>
+                      {log.market && (
+                        <div style={{fontSize:8,color:"#8ab8c8",marginBottom:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
+                          {log.market}
+                        </div>
+                      )}
+                      <div style={{fontSize:9,color:et.color === "#4a5868" ? "#506070" : "#c8d8e0",lineHeight:1.4}}>
+                        {log.message}
+                      </div>
+                      {log.detail && (
+                        <div style={{fontSize:8,color:"#4a6070",marginTop:1,lineHeight:1.3}}>
+                          {log.detail}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Time ago */}
+                    <span style={{fontSize:7,color:"#243848",whiteSpace:"nowrap",marginTop:2,flexShrink:0}}>
+                      {log.time_ago}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* ── PORTFOLIO CHART ─────────────────────────────── */}
           <div style={{background:"#090c10",borderBottom:"1px solid #0c1c28",padding:"13px 18px",flexShrink:0}}>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
               <span style={{fontSize:8,color:"#8ab8c8",letterSpacing:".2em"}}>PORTFOLIO · 24H</span>
@@ -257,7 +381,7 @@ export default function Dashboard() {
                 <span style={{fontSize:11,color:"#c8d8e0"}}>{sign(pd)}{((pd/p0)*100).toFixed(2)}%</span>
               </div>
             </div>
-            <ResponsiveContainer width="100%" height={100}>
+            <ResponsiveContainer width="100%" height={80}>
               <LineChart data={pnlData} margin={{top:2,right:2,bottom:0,left:0}}>
                 <defs>
                   <linearGradient id="lg" x1="0" y1="0" x2="1" y2="0">
@@ -273,6 +397,7 @@ export default function Dashboard() {
             </ResponsiveContainer>
           </div>
 
+          {/* Tabs */}
           <div style={{display:"flex",borderBottom:"1px solid #0c1c28",background:"#070a0d",flexShrink:0}}>
             {[["positions",POSITIONS.length],["trades",TRADES.length],["queue",QUEUE.length],["🐋 signals",signals.length]].map(([t,n])=>{
               const key=t.replace("🐋 ","");
@@ -286,6 +411,7 @@ export default function Dashboard() {
             })}
           </div>
 
+          {/* Tab content */}
           <div style={{flex:1,overflowY:"auto"}}>
 
             {tab==="positions"&&(
@@ -301,11 +427,8 @@ export default function Dashboard() {
                   <tbody>
                     {POSITIONS.map((p,i)=>{
                       const openedSec=p.opened_at?Math.floor((Date.now()-new Date(p.opened_at).getTime())/1000):0;
-                      const totalSec=openedSec+elapsed;
-                      const maxSec=24*3600;
-                      const pct=Math.min(totalSec/maxSec,1);
-                      const barColor=staleColor(pct);
-                      const urgency=staleLabel(pct);
+                      const totalSec=openedSec+elapsed, maxSec=24*3600;
+                      const pct=Math.min(totalSec/maxSec,1), barColor=staleColor(pct), urgency=staleLabel(pct);
                       return(
                         <tr key={i} className="rh" style={{borderBottom:"1px solid #07080b"}}>
                           <td style={{padding:"10px 10px",maxWidth:200}}>
