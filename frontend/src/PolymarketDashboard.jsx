@@ -176,14 +176,22 @@ export default function Dashboard() {
   useEffect(()=>{
     const fetchData = async () => {
       try {
-        const [port,pos,trd,agt,queue] = await Promise.all([
+        const [port,pos,trd,agt,queue,snaps] = await Promise.all([
           fetch(`${API_BASE}/api/portfolio`).then(r=>r.json()),
           fetch(`${API_BASE}/api/positions`).then(r=>r.json()),
           fetch(`${API_BASE}/api/trades`).then(r=>r.json()),
           fetch(`${API_BASE}/api/agents`).then(r=>r.json()),
           fetch(`${API_BASE}/api/queue`).then(r=>r.json()),
+          fetch(`${API_BASE}/api/snapshots`).then(r=>r.json()),
         ]);
         setPortfolio(port); setPositions(pos); setTrades(trd); setAgentData(agt); setQueue(queue);
+        if(snaps && snaps.length > 0){
+          const chartData = snaps.map(s=>({
+            time: new Date(s.time).toLocaleTimeString("en-US",{timeZone:"America/Los_Angeles",hour:"2-digit",minute:"2-digit"}),
+            balance: s.balance + (s.open_pnl||0)
+          }));
+          setPnlData(chartData);
+        }
         setApiError(false);
       } catch(e){ setApiError(true); }
     };
