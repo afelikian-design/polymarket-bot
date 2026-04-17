@@ -636,11 +636,26 @@ export default function Dashboard() {
           </div>
           <div style={{flex:1,overflowY:"auto"}}>
             {desktopTab==="positions"&&(POSITIONS.length===0?<div style={{padding:"40px",textAlign:"center",color:"#8ab8c8",fontSize:11}}>No open positions yet</div>:(
-              <table style={{width:"100%",borderCollapse:"collapse",fontSize:10}}>
+              <table style={{width:"100%",borderCollapse:"collapse",fontSize:9}}>
                 <thead style={{background:"#070a0d",position:"sticky",top:0}}>
-                  <tr>{["MARKET","ENTRY","NOW","EST.","SIZE","UNRLZD"].map(h=>(<th key={h} style={{padding:"7px 10px",textAlign:"left",color:"#8ab8c8",fontSize:8,letterSpacing:".12em",fontWeight:400,borderBottom:"1px solid #0c1c28"}}>{h}</th>))}</tr>
+                  <tr>{["MARKET","ENTRY","YES","NO","EST.","SIZE","HELD","EXPIRES","UNRLZD"].map(h=>(<th key={h} style={{padding:"6px 8px",textAlign:"left",color:"#8ab8c8",fontSize:7,letterSpacing:".12em",fontWeight:400,borderBottom:"1px solid #0c1c28",whiteSpace:"nowrap"}}>{h}</th>))}</tr>
                 </thead>
-                <tbody>{POSITIONS.map((p,i)=>(<tr key={i} className="rh" style={{borderBottom:"1px solid #07080b"}}><td style={{padding:"10px",color:"#fff",maxWidth:200}}><div style={{overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p.question}</div></td><td style={{padding:"10px",color:"#c8d8e0"}}>{p.entry_price?.toFixed(3)}</td><td style={{padding:"10px",color:p.current_price>p.entry_price?"#00a858":"#ff4455"}}>{p.current_price?.toFixed(3)}</td><td style={{padding:"10px",color:"#f0c070"}}>{fmtPct(p.our_probability||0)}</td><td style={{padding:"10px",color:"#fff"}}>{fmt$(p.size_usd||0)}</td><td style={{padding:"10px",color:(p.unrealized_pnl||0)>=0?"#00a858":"#ff4455",fontWeight:500}}>{sign(p.unrealized_pnl||0)}{fmt$(p.unrealized_pnl||0)}</td></tr>))}</tbody>
+                <tbody>{POSITIONS.map((p,i)=>{
+                  const noPrice = p.current_price!=null?(1-p.current_price).toFixed(3):"—";
+                  const heldHrs = p.opened_at?((Date.now()-new Date(p.opened_at+"Z").getTime())/3600000).toFixed(1)+"h":"—";
+                  const expires = p.closes_at?new Date(p.closes_at).toLocaleDateString([],{month:"short",day:"numeric",hour:"2-digit",minute:"2-digit"}):"—";
+                  return(<tr key={i} className="rh" style={{borderBottom:"1px solid #07080b"}}>
+                    <td style={{padding:"8px",color:"#fff",maxWidth:260,fontSize:9,lineHeight:1.4,wordBreak:"break-word"}}>{p.question}</td>
+                    <td style={{padding:"8px",color:"#c8d8e0",whiteSpace:"nowrap"}}>{p.entry_price?.toFixed(3)}</td>
+                    <td style={{padding:"8px",color:p.current_price>p.entry_price?"#00a858":"#ff4455",whiteSpace:"nowrap"}}>{p.current_price?.toFixed(3)}</td>
+                    <td style={{padding:"8px",color:"#607888",whiteSpace:"nowrap"}}>{noPrice}</td>
+                    <td style={{padding:"8px",color:"#f0c070",whiteSpace:"nowrap"}}>{fmtPct(p.our_probability||0)}</td>
+                    <td style={{padding:"8px",color:"#fff",whiteSpace:"nowrap"}}>{fmt$(p.size_usd||0)}</td>
+                    <td style={{padding:"8px",color:"#8ab8c8",whiteSpace:"nowrap"}}>{heldHrs}</td>
+                    <td style={{padding:"8px",color:"#607888",fontSize:8,whiteSpace:"nowrap"}}>{expires}</td>
+                    <td style={{padding:"8px",color:(p.unrealized_pnl||0)>=0?"#00a858":"#ff4455",fontWeight:500,whiteSpace:"nowrap"}}>{sign(p.unrealized_pnl||0)}{fmt$(p.unrealized_pnl||0)}</td>
+                  </tr>);
+                })}</tbody>
               </table>
             ))}
             {desktopTab==="trades"&&(TRADES.length===0?<div style={{padding:"40px",textAlign:"center",color:"#8ab8c8",fontSize:11}}>No closed trades yet</div>:(
