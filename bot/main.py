@@ -5,7 +5,7 @@ import threading
 import json
 import requests as http_requests
 from datetime import datetime, timezone
-from database import init_db, AgentLog, WalletSnapshot
+from database import init_db, AgentLog, WalletSnapshot, ActivityLog
 from config import Config
 from api import app
 
@@ -22,6 +22,21 @@ logger = logging.getLogger("main")
 db = init_db(Config.DB_PATH)
 
 
+# ─── Activity Feed Logger ────────────────────────────────────
+def log_activity(agent, event_type, message, market=None, detail=None):
+    """Rich activity logging — powers the live dashboard feed."""
+    entry = ActivityLog(
+        agent=agent,
+        event_type=event_type,
+        market=market[:80] if market else None,
+        message=message,
+        detail=detail,
+    )
+    db.add(entry)
+    db.commit()
+    logger.info("[{}] {} {}".format(agent, event_type, message))
+
+
 class Portfolio:
     def __init__(self, db_session, initial_balance=1000.0):
         self.db = db_session
@@ -29,14 +44,9 @@ class Portfolio:
         self._peak = initial_balance
         self._start_of_day = initial_balance
 
-    def get_balance(self):
-        return self._balance
-
-    def get_peak_balance(self):
-        return self._peak
-
-    def get_start_of_day_balance(self):
-        return self._start_of_day
+    def get_balance(self): return self._balance
+    def get_peak_balance(self): return self._peak
+    def get_start_of_day_balance(self): return self._start_of_day
 
     def get_open_count(self):
         from database import Position
@@ -100,8 +110,10 @@ def log_agent(agent, status, message):
     db.commit()
 
 
+# ─── Scanner ─────────────────────────────────────────────────
 def run_scanner():
     log_agent("scanner", "running", "Scanning Polymarket markets...")
+    log_activity("scanner", "SCANNING", "Fetching active markets from Polymarket Gamma API...")
     try:
         url = "https://gamma-api.polymarket.com/markets"
         params = {
@@ -116,7 +128,13 @@ def run_scanner():
 
         if not markets:
             log_agent("scanner", "idle", "No active markets found")
+            log_activity("scanner", "ERROR", "No active markets returned from API")
             return []
+
+        log_activity("scanner", "SCANNING",
+            "Fetched {} markets — applying filters".format(len(markets)),
+            detail="Filters: volume>${}, {}–{}h to resolution".format(
+                Config.MIN_VOLUME, Config.MIN_HOURS, Config.MAX_HOURS))
 
         scored = []
         now = datetime.now(timezone.utc)
@@ -168,18 +186,22 @@ def run_scanner():
         with open("queue.json", "w") as f:
             json.dump(scored, f, indent=2)
 
-        msg = "Scan complete: {} markets passed (from {} total)".format(len(scored), len(markets))
-        log_agent("scanner", "idle", msg)
-        logger.info(msg)
+        msg = "{} markets passed filters (from {} total)".format(len(scored), len(markets))
+        log_agent("scanner", "idle", "Scan complete: " + msg)
+        log_activity("scanner", "SCANNING",
+            "Scan complete — {} candidates queued for Claude".format(len(scored)),
+            detail=msg)
         return scored
 
     except Exception as e:
         msg = "Scanner error: {}".format(e)
         log_agent("scanner", "error", msg)
+        log_activity("scanner", "ERROR", msg)
         logger.error(msg)
         return []
 
 
+# ─── Brain ───────────────────────────────────────────────────
 def run_brain():
     log_agent("brain", "running", "Evaluating markets with Claude...")
     try:
@@ -190,16 +212,33 @@ def run_brain():
                 queue = json.load(f)
         except FileNotFoundError:
             log_agent("brain", "idle", "No queue.json found")
+            log_activity("brain", "SKIP", "No market queue found — scanner may not have run yet")
             return []
 
         if not queue:
             log_agent("brain", "idle", "Queue is empty")
+            log_activity("brain", "SKIP", "Market queue is empty — no candidates to evaluate")
             return []
+
+        log_activity("brain", "EVALUATING",
+            "Starting evaluation of {} candidate markets".format(len(queue)),
+            detail="Model: {} | Min confidence: {}".format(Config.CLAUDE_MODEL, Config.MIN_CONFIDENCE))
 
         claude = anthropic.Anthropic(api_key=Config.ANTHROPIC_API_KEY)
         theses = []
+        skipped = 0
 
-        for market in queue[:20]:
+        for i, market in enumerate(queue[:20]):
+            q = market["question"]
+            price = market["price"]
+            hours = market["hours"]
+            volume = market["volume"]
+
+            log_activity("brain", "EVALUATING",
+                "Analyzing market {}/{}".format(i + 1, min(len(queue), 20)),
+                market=q,
+                detail="Price: {} | {}h remaining | Vol: ${:,.0f}".format(price, hours, volume))
+
             try:
                 prompt = (
                     "Evaluate this prediction market for a trading opportunity.\n\n"
@@ -214,22 +253,17 @@ def run_brain():
                     '  "edge": 0.XX,\n'
                     '  "direction": "OVER" or "UNDER",\n'
                     '  "confidence": 0-100,\n'
+                    '  "crowd_error": "brief description of crowd mistake or null",\n'
+                    '  "base_rate_note": "brief base rate observation",\n'
                     '  "thesis": "one sentence trading thesis",\n'
                     '  "action": "BUY" or "SKIP"\n'
                     "}}\n\n"
                     "Set action=SKIP if edge < 0.07 or confidence < 70."
-                ).format(
-                    market["question"],
-                    market["price"],
-                    round(market["price"] * 100),
-                    market["hours"],
-                    market["volume"],
-                    market["price"]
-                )
+                ).format(q, price, round(price * 100), hours, volume, price)
 
                 response = claude.messages.create(
                     model=Config.CLAUDE_MODEL,
-                    max_tokens=400,
+                    max_tokens=500,
                     messages=[{"role": "user", "content": prompt}]
                 )
 
@@ -237,40 +271,75 @@ def run_brain():
                 text = text.replace("```json", "").replace("```", "").strip()
                 result = json.loads(text)
 
-                if result.get("action") == "SKIP":
-                    continue
-                if result.get("confidence", 0) < Config.MIN_CONFIDENCE:
+                our_prob = result.get("our_probability", 0)
+                edge = result.get("edge", 0)
+                confidence = result.get("confidence", 0)
+                direction = result.get("direction", "")
+                crowd_error = result.get("crowd_error")
+                base_rate = result.get("base_rate_note")
+                thesis = result.get("thesis", "")
+                action = result.get("action", "SKIP")
+
+                if action == "SKIP" or confidence < Config.MIN_CONFIDENCE:
+                    skip_reason = "edge too thin ({:.3f})".format(edge) if edge < 0.07 else "low confidence ({})".format(confidence)
+                    log_activity("brain", "SKIP",
+                        "SKIP — {}".format(skip_reason),
+                        market=q,
+                        detail="Our est: {:.1%} | Mkt: {:.1%} | Edge: {:.3f} | Conf: {}{}".format(
+                            our_prob, price, edge, confidence,
+                            " | " + crowd_error if crowd_error else ""))
+                    skipped += 1
                     continue
 
+                # Thesis generated
                 result["condition_id"] = market["condition_id"]
-                result["question"] = market["question"]
+                result["question"] = q
                 theses.append(result)
-                logger.info("THESIS: {} | Conf: {} | Edge: {:.3f}".format(
-                    market["question"][:60],
-                    result.get("confidence"),
-                    result.get("edge", 0)
-                ))
+
+                detail_parts = [
+                    "Our est: {:.1%} vs mkt: {:.1%}".format(our_prob, price),
+                    "Edge: {:+.3f} ({})".format(edge, direction),
+                    "Confidence: {}/100".format(confidence),
+                ]
+                if crowd_error:
+                    detail_parts.append("Crowd error: {}".format(crowd_error))
+                if base_rate:
+                    detail_parts.append("Base rate: {}".format(base_rate))
+
+                log_activity("brain", "THESIS",
+                    "THESIS GENERATED — {}".format(thesis),
+                    market=q,
+                    detail=" | ".join(detail_parts))
+
                 time.sleep(0.5)
 
             except Exception as e:
+                log_activity("brain", "ERROR",
+                    "Evaluation failed: {}".format(str(e)[:80]),
+                    market=q)
                 logger.debug("Brain failed on market: {}".format(e))
                 continue
 
         with open("thesis.json", "w") as f:
             json.dump(theses, f, indent=2)
 
-        msg = "Brain complete: {} theses from {} markets".format(len(theses), len(queue))
-        log_agent("brain", "idle", msg)
-        logger.info(msg)
+        msg = "{} theses generated, {} skipped (from {} evaluated)".format(
+            len(theses), skipped, min(len(queue), 20))
+        log_agent("brain", "idle", "Brain complete: " + msg)
+        log_activity("brain", "EVALUATING",
+            "Evaluation complete — {} actionable trades identified".format(len(theses)),
+            detail=msg)
         return theses
 
     except Exception as e:
         msg = "Brain error: {}".format(e)
         log_agent("brain", "error", msg)
+        log_activity("brain", "ERROR", msg)
         logger.error(msg)
         return []
 
 
+# ─── Executor ────────────────────────────────────────────────
 def kelly_size(p_win, market_price, bankroll):
     if not (0 < market_price < 1) or not (0 < p_win < 1):
         return 0.0
@@ -294,11 +363,21 @@ def run_executor():
             log_agent("executor", "idle", "No thesis.json found")
             return
 
+        if not theses:
+            log_agent("executor", "idle", "No theses to execute")
+            return
+
         placed = 0
         balance = portfolio.get_balance()
 
+        log_activity("executor", "TRADE",
+            "Reviewing {} theses for execution".format(len(theses)),
+            detail="Bankroll: ${:.2f} | Open positions: {}/{}".format(
+                balance, portfolio.get_open_count(), Config.MAX_OPEN_POSITIONS))
+
         for thesis in theses:
             condition_id = thesis.get("condition_id")
+            q = thesis.get("question", "")
             if not condition_id:
                 continue
 
@@ -306,6 +385,9 @@ def run_executor():
                 id=condition_id, status="OPEN"
             ).first()
             if existing:
+                log_activity("executor", "SKIP",
+                    "Already in position — skipping",
+                    market=q)
                 continue
 
             size = kelly_size(
@@ -315,6 +397,11 @@ def run_executor():
             )
 
             if size < 10:
+                log_activity("executor", "SKIP",
+                    "Kelly size ${:.2f} too small — skipping".format(size),
+                    market=q,
+                    detail="Kelly fraction: {:.2%} of ${:.0f} bankroll".format(
+                        size / balance if balance > 0 else 0, balance))
                 continue
 
             ok, reason = risk.can_trade(
@@ -326,6 +413,9 @@ def run_executor():
             )
 
             if not ok:
+                log_activity("executor", "SKIP",
+                    "Risk block: {}".format(reason),
+                    market=q)
                 logger.warning("Risk block: {}".format(reason))
                 continue
 
@@ -333,13 +423,10 @@ def run_executor():
                 condition_id[:8],
                 int(datetime.utcnow().timestamp())
             )
-            logger.info("[PAPER] BUY ${} @ {} | {}".format(
-                size, thesis.get("market_price"), thesis.get("question", "")[:50]
-            ))
 
             position = Position(
                 id=condition_id,
-                question=thesis.get("question", ""),
+                question=q,
                 entry_price=thesis.get("market_price", 0),
                 current_price=thesis.get("market_price", 0),
                 size_usd=size,
@@ -363,22 +450,44 @@ def run_executor():
             db.commit()
             placed += 1
 
-        msg = "Executor done: {} paper trades placed".format(placed)
-        log_agent("executor", "idle", msg)
-        logger.info(msg)
+            log_activity("executor", "TRADE",
+                "{} PAPER TRADE — ${:.2f} @ {:.3f}".format(
+                    "📝" if Config.PAPER_TRADING else "🟢",
+                    size, thesis.get("market_price", 0)),
+                market=q,
+                detail="Kelly: {:.1%} | Our prob: {:.1%} | Edge: {:+.3f} | Thesis: {}".format(
+                    size / balance if balance > 0 else 0,
+                    thesis.get("our_probability", 0),
+                    thesis.get("edge", 0),
+                    thesis.get("thesis", "")[:60]))
+
+        msg = "{} paper trades placed".format(placed)
+        log_agent("executor", "idle", "Executor done: " + msg)
+        if placed == 0 and theses:
+            log_activity("executor", "TRADE", "No new trades placed — all blocked by risk or already open")
 
     except Exception as e:
         msg = "Executor error: {}".format(e)
         log_agent("executor", "error", msg)
+        log_activity("executor", "ERROR", msg)
         logger.error(msg)
 
 
+# ─── Exit Monitor ────────────────────────────────────────────
 def run_exit_monitor():
     log_agent("exit_monitor", "running", "Checking exit conditions...")
     try:
         from database import Position, Trade
 
         open_positions = db.query(Position).filter_by(status="OPEN").all()
+
+        if not open_positions:
+            log_agent("exit_monitor", "idle", "No open positions to monitor")
+            return
+
+        log_activity("exit_monitor", "EXIT",
+            "Monitoring {} open positions".format(len(open_positions)))
+
         exits = 0
 
         for pos in open_positions:
@@ -392,12 +501,13 @@ def run_exit_monitor():
                     best_bid = float(market.get("bestBid", 0) or 0)
                     best_ask = float(market.get("bestAsk", 1) or 1)
                     if best_bid > 0 and best_ask > 0:
-                        current_price = (best_bid + best_ask) / 2
-                        pos.current_price = round(current_price, 4)
+                        current_price = round((best_bid + best_ask) / 2, 4)
+                        pos.current_price = current_price
                         db.commit()
 
                 hours_held = (datetime.utcnow() - pos.opened_at).total_seconds() / 3600
                 current_price = pos.current_price
+                pnl = (current_price - pos.entry_price) * (pos.size_usd / pos.entry_price)
                 should_exit = False
                 exit_reason = ""
 
@@ -414,7 +524,6 @@ def run_exit_monitor():
                         exit_reason = "STALE_THESIS"
 
                 if should_exit:
-                    pnl = (current_price - pos.entry_price) * (pos.size_usd / pos.entry_price)
                     pos.status = "CLOSED"
                     pos.exit_price = current_price
                     pos.exit_reason = exit_reason
@@ -431,9 +540,24 @@ def run_exit_monitor():
                     db.add(trade)
                     db.commit()
                     exits += 1
-                    logger.info("EXIT [{}] {} | PnL: ${:.2f}".format(
-                        exit_reason, pos.question[:50], pnl
-                    ))
+
+                    log_activity("exit_monitor", "EXIT",
+                        "CLOSED [{reason}] — PnL: ${pnl:+.2f}".format(
+                            reason=exit_reason, pnl=pnl),
+                        market=pos.question,
+                        detail="Entry: {:.3f} → Exit: {:.3f} | Held: {:.1f}h | Size: ${:.0f}".format(
+                            pos.entry_price, current_price, hours_held, pos.size_usd))
+                else:
+                    # Log current status for active positions
+                    pnl_pct = (current_price - pos.entry_price) / pos.entry_price * 100
+                    log_activity("exit_monitor", "EXIT",
+                        "Watching — {:.1f}h held | PnL: ${:+.2f} ({:+.1f}%)".format(
+                            hours_held, pnl, pnl_pct),
+                        market=pos.question,
+                        detail="Price: {:.3f} | Target: {:.3f} | Stop: {:.3f}".format(
+                            current_price,
+                            pos.entry_price + (pos.expected_gap * Config.TARGET_CAPTURE),
+                            pos.entry_price * 0.75))
 
             except Exception as e:
                 logger.debug("Exit check failed: {}".format(e))
@@ -445,13 +569,18 @@ def run_exit_monitor():
     except Exception as e:
         msg = "Exit monitor error: {}".format(e)
         log_agent("exit_monitor", "error", msg)
+        log_activity("exit_monitor", "ERROR", msg)
         logger.error(msg)
 
 
+# ─── Whale Monitor ───────────────────────────────────────────
 def run_whale_monitor():
     log_agent("whale_monitor", "idle", "Monitoring markets for whale activity")
+    log_activity("whale_monitor", "SCANNING",
+        "Polling 50 tracked wallets for new position entries")
 
 
+# ─── Main ────────────────────────────────────────────────────
 def main():
     logger.info("=" * 50)
     logger.info("POLYBOT STARTING - {}".format("PAPER" if Config.PAPER_TRADING else "LIVE"))
@@ -474,6 +603,11 @@ def main():
     log_agent("executor", "idle", "Bot started")
     log_agent("exit_monitor", "idle", "Bot started")
     log_agent("whale_monitor", "idle", "Bot started")
+
+    log_activity("scanner", "SCANNING",
+        "PolyBot started in {} mode — beginning initial scan".format(
+            "PAPER" if Config.PAPER_TRADING else "LIVE"),
+        detail="Server: Hetzner Nuremberg | Model: {} | Bankroll: $1,000".format(Config.CLAUDE_MODEL))
 
     logger.info("Running initial scan...")
     run_scanner()
