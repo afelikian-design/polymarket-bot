@@ -106,51 +106,28 @@ const CatBadge = ({cat}) => (
   </span>
 );
 
-function WhaleCard({w, expanded, onToggle}) {
+function WhaleCard({w}) {
   return (
-    <div style={{background:"#09090e",border:"1px solid #0c1820",borderRadius:6,marginBottom:10,overflow:"hidden"}}>
-      <div onClick={onToggle} style={{padding:"12px 14px",cursor:"pointer"}}>
-        <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}>
-          <div style={{width:6,height:6,borderRadius:"50%",background:w.active?"#00ff8c":"#8ab8c8",boxShadow:w.active?"0 0 6px #00ff8c":"none",flexShrink:0}}/>
-          <span style={{fontSize:11,color:"#c8d8e0",flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{w.address}</span>
-          <TierBadge tier={w.tier}/>
-          <span style={{fontSize:11,color:"#304858",marginLeft:4}}>{expanded?"▲":"▼"}</span>
-        </div>
-        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:6,marginBottom:8}}>
-          {[["WIN RATE",fmtPct(w.win_rate),"#00a858"],["TOTAL PnL",fmtK(w.total_pnl),"#f0c070"],["TRADES",w.total_trades,"#80c8e0"]].map(([l,v,c])=>(
-            <div key={l}>
-              <div style={{fontSize:9,color:"#8ab8c8",letterSpacing:".1em",marginBottom:2}}>{l}</div>
-              <div style={{fontSize:13,color:c,fontWeight:500}}>{v}</div>
-            </div>
-          ))}
-        </div>
-        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
-          <CatBadge cat={w.best_category}/>
-          <span style={{fontSize:9,color:"#c8d8e0"}}>weight {fmtPct(w.signal_weight)}</span>
-        </div>
-        <div style={{background:"#0d1018",height:3,borderRadius:2}}>
-          <div style={{background:TC[w.tier],height:"100%",width:fmtPct(w.win_rate),borderRadius:2,opacity:.65}}/>
+    <div style={{background:"#09090e",border:"1px solid #0c1820",borderRadius:4,marginBottom:5,padding:"7px 10px"}}>
+      <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:4}}>
+        <div style={{width:5,height:5,borderRadius:"50%",background:w.active?"#00ff8c":"#8ab8c8",boxShadow:w.active?"0 0 5px #00ff8c":"none",flexShrink:0}}/>
+        <span style={{fontSize:9,color:"#c8d8e0",flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{w.address}</span>
+        <TierBadge tier={w.tier}/>
+      </div>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:4}}>
+        {[["WIN",fmtPct(w.win_rate),"#00a858"],["PnL",fmtK(w.total_pnl),"#f0c070"],["TRD",w.total_trades,"#80c8e0"]].map(([l,v,c])=>(
+          <div key={l} style={{display:"flex",alignItems:"baseline",gap:4}}>
+            <span style={{fontSize:7,color:"#4a6070",letterSpacing:".1em"}}>{l}</span>
+            <span style={{fontSize:10,color:c,fontWeight:500}}>{v}</span>
+          </div>
+        ))}
+      </div>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginTop:4}}>
+        <CatBadge cat={w.best_category}/>
+        <div style={{background:"#0d1018",height:2,borderRadius:1,width:60}}>
+          <div style={{background:TC[w.tier],height:"100%",width:fmtPct(w.win_rate),borderRadius:1,opacity:.7}}/>
         </div>
       </div>
-      {expanded && (
-        <div style={{borderTop:"1px solid #0c1820",background:"#070a0d"}}>
-          <div style={{padding:"6px 14px 4px",fontSize:9,color:"#4a6070",letterSpacing:".14em"}}>LAST 3 TRADES</div>
-          {w.recent.map((t,i)=>(
-            <div key={i} style={{padding:"8px 14px",borderTop:i>0?"1px solid #0a0c10":"none"}}>
-              <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:4}}>
-                <span style={{fontSize:9,padding:"2px 6px",borderRadius:2,background:t.side==="BUY"?"#002010":"#200010",color:t.side==="BUY"?"#00a858":"#ff4455",flexShrink:0}}>{t.side}</span>
-                <span style={{fontSize:11,color:"#ffffff",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",flex:1}}>{t.market}</span>
-              </div>
-              <div style={{display:"flex",gap:12,alignItems:"center"}}>
-                <span style={{fontSize:10,color:"#4a6070"}}>@ <span style={{color:"#c8d8e0"}}>{t.price.toFixed(2)}</span></span>
-                <span style={{fontSize:10,color:"#4a6070"}}>→ <span style={{color:t.outcome==="YES"?"#00a858":t.outcome==="NO"?"#ff4455":"#8ab8c8"}}>{t.outcome}</span></span>
-                <div style={{flex:1}}/>
-                <span style={{fontSize:11,fontWeight:500,color:t.pnl.startsWith("+")?"#00a858":t.pnl.startsWith("-")?"#ff4455":"#8ab8c8"}}>{t.pnl}</span>
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
     </div>
   );
 }
@@ -674,7 +651,21 @@ export default function Dashboard() {
             {["leaderboard","stats"].map(t=>(<button key={t} className="tb" onClick={()=>setWTab(t)} style={{flex:1,padding:"9px 0",fontSize:8,letterSpacing:".14em",color:wTab===t?"#f0c070":"#8ab8c8",borderBottom:wTab===t?"2px solid #f0c070":"2px solid transparent",marginBottom:-1,transition:"color .15s"}}>{t.toUpperCase()}</button>))}
           </div>
           <div style={{flex:1,overflowY:"auto",padding:"10px"}}>
-            {wTab==="leaderboard"&&(<><div style={{fontSize:8,color:"#8ab8c8",letterSpacing:".18em",marginBottom:8}}>{WHALES.length} WALLETS · CLICK TO EXPAND</div>{WHALES.map((w,i)=>(<WhaleCard key={i} w={w} expanded={expandedWhale===i} onToggle={()=>setExpandedWhale(expandedWhale===i?null:i)}/>))}</>)}
+            {wTab==="leaderboard"&&(<>
+              <div style={{fontSize:8,color:"#8ab8c8",letterSpacing:".18em",marginBottom:6}}>{WHALES.length} WALLETS TRACKED</div>
+              {WHALES.map((w,i)=>(<WhaleCard key={i} w={w}/>))}
+              <div style={{marginTop:10,marginBottom:6,borderTop:"1px solid #0c1820",paddingTop:10}}>
+                <div style={{fontSize:8,color:"#8ab8c8",letterSpacing:".18em",marginBottom:6}}>RECENT WHALE TRADES</div>
+                {WHALES.flatMap(w=>w.recent.map(t=>({...t,address:w.address,tier:w.tier}))).slice(0,12).map((t,i)=>(
+                  <div key={i} style={{padding:"5px 0",borderBottom:"1px solid #0a0c10",display:"flex",alignItems:"center",gap:6}}>
+                    <span style={{fontSize:7,padding:"1px 4px",borderRadius:2,background:t.side==="BUY"?"#002010":"#200010",color:t.side==="BUY"?"#00a858":"#ff4455",flexShrink:0}}>{t.side}</span>
+                    <span style={{fontSize:8,color:"#c8d8e0",flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{t.market}</span>
+                    <span style={{fontSize:7,color:"#4a6070",whiteSpace:"nowrap"}}>@{t.price.toFixed(2)}</span>
+                    <span style={{fontSize:8,fontWeight:500,color:t.pnl.startsWith("+")?"#00a858":t.pnl.startsWith("-")?"#ff4455":"#8ab8c8",whiteSpace:"nowrap",flexShrink:0}}>{t.pnl}</span>
+                  </div>
+                ))}
+              </div>
+            </>)}
             {wTab==="stats"&&(<><div style={{fontSize:8,color:"#8ab8c8",letterSpacing:".18em",marginBottom:10}}>LIVE PERFORMANCE</div>{[{l:"BALANCE",v:fmt$(portfolio.balance),c:"#ffffff",big:true},{l:"TODAY P&L",v:`${sign(portfolio.daily_pnl)}${fmt$(portfolio.daily_pnl)}`,c:portfolio.daily_pnl>=0?"#00ff8c":"#ff4455",big:true},{l:"WIN RATE",v:fmtPct(portfolio.win_rate),c:"#f0c070"},{l:"TOTAL TRADES",v:`${portfolio.total_trades}`,c:"#80c8e0"},{l:"OPEN POSITIONS",v:`${portfolio.open_positions}`,c:"#ffffff"},{l:"DRAWDOWN",v:fmtPct(portfolio.drawdown_pct),c:"#c8d8e0"},{l:"MODE",v:portfolio.paper_trading?"PAPER TRADING":"LIVE TRADING",c:portfolio.paper_trading?"#f0c070":"#00ff8c"}].map(({l,v,c,big})=>(<div key={l} style={{padding:"7px 0",borderBottom:"1px solid #08090c"}}><div style={{fontSize:8,color:"#8ab8c8",letterSpacing:".14em",marginBottom:3}}>{l}</div><div style={{fontSize:big?18:13,color:c,fontWeight:big?500:400}}>{v}</div></div>))}</>)}
           </div>
         </div>
