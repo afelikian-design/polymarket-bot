@@ -622,7 +622,10 @@ export default function Dashboard() {
                   const heldHrs = p.opened_at?((Date.now()-new Date(p.opened_at+"Z").getTime())/3600000).toFixed(1)+"h":"—";
                   const expires = p.closes_at?new Date(p.closes_at).toLocaleDateString([],{month:"short",day:"numeric",hour:"2-digit",minute:"2-digit"}):"—";
                   return(<tr key={i} className="rh" style={{borderBottom:"1px solid #07080b"}}>
-                    <td style={{padding:"8px",color:"#fff",maxWidth:260,fontSize:9,lineHeight:1.4,wordBreak:"break-word"}}>{p.question}</td>
+                    <td style={{padding:"8px",color:"#fff",maxWidth:260,fontSize:9,lineHeight:1.4,wordBreak:"break-word"}}>
+                      <div>{p.question}</div>
+                      {p.thesis&&<div style={{fontSize:7,color:"#4a7080",marginTop:3,lineHeight:1.4,fontStyle:"italic"}}>"{p.thesis}"</div>}
+                    </td>
                     <td style={{padding:"8px",color:"#c8d8e0",whiteSpace:"nowrap"}}>{p.entry_price?.toFixed(3)}</td>
                     <td style={{padding:"8px",color:p.current_price>p.entry_price?"#00a858":"#ff4455",whiteSpace:"nowrap"}}>{p.current_price?.toFixed(3)}</td>
                     <td style={{padding:"8px",color:"#607888",whiteSpace:"nowrap"}}>{noPrice}</td>
