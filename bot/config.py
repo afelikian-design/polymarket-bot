@@ -30,7 +30,7 @@ class Config:
     MIN_VOLUME          = 1_000
 
     CLAUDE_MODEL        = "claude-opus-4-5"
-    MIN_CONFIDENCE      = 75
+    MIN_CONFIDENCE      = 63
     CONSENSUS_THRESHOLD = 2
 
     TARGET_CAPTURE      = 0.85
