@@ -615,7 +615,7 @@ export default function Dashboard() {
             {desktopTab==="positions"&&(POSITIONS.length===0?<div style={{padding:"40px",textAlign:"center",color:"#8ab8c8",fontSize:11}}>No open positions yet</div>:(
               <table style={{width:"100%",borderCollapse:"collapse",fontSize:9}}>
                 <thead style={{background:"#070a0d",position:"sticky",top:0}}>
-                  <tr>{["MARKET","ENTRY","YES","NO","EST.","SIZE","HELD","EXPIRES","UNRLZD"].map(h=>(<th key={h} style={{padding:"6px 8px",textAlign:"left",color:"#8ab8c8",fontSize:7,letterSpacing:".12em",fontWeight:400,borderBottom:"1px solid #0c1c28",whiteSpace:"nowrap"}}>{h}</th>))}</tr>
+                  <tr>{["MARKET","ENTRY","YES","NO","EST.","SIZE","HELD","EXPIRES","UNRLZD",""].map(h=>(<th key={h} style={{padding:"6px 8px",textAlign:"left",color:"#8ab8c8",fontSize:7,letterSpacing:".12em",fontWeight:400,borderBottom:"1px solid #0c1c28",whiteSpace:"nowrap"}}>{h}</th>))}</tr>
                 </thead>
                 <tbody>{POSITIONS.map((p,i)=>{
                   const noPrice = p.current_price!=null?(1-p.current_price).toFixed(3):"—";
@@ -631,6 +631,9 @@ export default function Dashboard() {
                     <td style={{padding:"8px",color:"#8ab8c8",whiteSpace:"nowrap"}}>{heldHrs}</td>
                     <td style={{padding:"8px",color:"#607888",fontSize:8,whiteSpace:"nowrap"}}>{expires}</td>
                     <td style={{padding:"8px",color:(p.unrealized_pnl||0)>=0?"#00a858":"#ff4455",fontWeight:500,whiteSpace:"nowrap"}}>{sign(p.unrealized_pnl||0)}{fmt$(p.unrealized_pnl||0)}</td>
+                    <td style={{padding:"8px",whiteSpace:"nowrap"}}>
+                      <button onClick={async()=>{if(!window.confirm("Close this position?"))return;await fetch(`${API_BASE}/api/close_position/${p.id}`,{method:"POST"});}} style={{fontSize:7,padding:"2px 7px",borderRadius:2,background:"#200010",color:"#ff6070",border:"1px solid #400020",cursor:"pointer",fontFamily:"inherit",letterSpacing:".1em"}}>SELL</button>
+                    </td>
                   </tr>);
                 })}</tbody>
               </table>
