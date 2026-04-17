@@ -21,10 +21,10 @@ logger = logging.getLogger("main")
 
 db = init_db(Config.DB_PATH)
 
+INITIAL_BALANCE = 1000.0
 
-# ─── Activity Feed Logger ────────────────────────────────────
+
 def log_activity(agent, event_type, message, market=None, detail=None):
-    """Rich activity logging — powers the live dashboard feed."""
     entry = ActivityLog(
         agent=agent,
         event_type=event_type,
@@ -38,15 +38,68 @@ def log_activity(agent, event_type, message, market=None, detail=None):
 
 
 class Portfolio:
-    def __init__(self, db_session, initial_balance=1000.0):
+    def __init__(self, db_session, initial_balance=INITIAL_BALANCE):
         self.db = db_session
-        self._balance = initial_balance
-        self._peak = initial_balance
-        self._start_of_day = initial_balance
+        self._initial = initial_balance
 
-    def get_balance(self): return self._balance
-    def get_peak_balance(self): return self._peak
-    def get_start_of_day_balance(self): return self._start_of_day
+    def get_realized_pnl(self):
+        from database import Position
+        closed = self.db.query(Position).filter_by(status="CLOSED").all()
+        return sum(p.pnl or 0 for p in closed)
+
+    def get_open_pnl(self):
+        from database import Position
+        open_pos = self.db.query(Position).filter_by(status="OPEN").all()
+        return sum(
+            (p.current_price - p.entry_price) * (p.size_usd / p.entry_price)
+            for p in open_pos if p.entry_price and p.entry_price > 0
+        )
+
+    def get_balance(self):
+        return round(self._initial + self.get_realized_pnl(), 2)
+
+    def get_peak_balance(self):
+        snap = self.db.query(WalletSnapshot)\
+            .order_by(WalletSnapshot.peak_balance.desc()).first()
+        peak = snap.peak_balance if snap else self._initial
+        return max(peak, self.get_balance())
+
+    def get_start_of_day_balance(self):
+        from database import Position
+        today_start = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+        closed_before_today = self.db.query(Position).filter(
+            Position.status == "CLOSED",
+            Position.closed_at < today_start
+        ).all()
+        return round(self._initial + sum(p.pnl or 0 for p in closed_before_today), 2)
+
+    def get_daily_pnl(self):
+        from database import Position
+        today_start = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+        today_closed = self.db.query(Position).filter(
+            Position.status == "CLOSED",
+            Position.closed_at >= today_start
+        ).all()
+        return round(sum(p.pnl or 0 for p in today_closed), 2)
+
+    def get_open_count(self):
+        from database import Position
+        return self.db.query(Position).filter_by(status="OPEN").count()
+
+    def get_win_rate(self):
+        from database import Position
+        closed = self.db.query(Position).filter_by(status="CLOSED").all()
+        if not closed:
+            return 0.0
+        wins = sum(1 for p in closed if (p.pnl or 0) > 0)
+        return round(wins / len(closed), 3)
+
+    def get_drawdown(self):
+        balance = self.get_balance()
+        peak = self.get_peak_balance()
+        if peak <= 0:
+            return 0.0
+        return round((balance - peak) / peak, 4)
 
     def get_open_count(self):
         from database import Position
@@ -60,13 +113,15 @@ class Portfolio:
             for p in open_pos if p.entry_price and p.entry_price > 0
         )
         closed = self.db.query(Position).filter_by(status="CLOSED").all()
-        daily_pnl = sum(p.pnl or 0 for p in closed)
-        drawdown = (self._balance - self._peak) / self._peak if self._peak > 0 else 0
+        daily_pnl = self.get_daily_pnl()
+        balance = self.get_balance()
+        peak = self.get_peak_balance()
+        drawdown = (balance - peak) / peak if peak > 0 else 0
         snap = WalletSnapshot(
-            balance=self._balance,
+            balance=balance,
             open_pnl=round(open_pnl, 2),
-            daily_pnl=round(daily_pnl, 2),
-            peak_balance=self._peak,
+            daily_pnl=daily_pnl,
+            peak_balance=peak,
             drawdown_pct=round(drawdown, 4),
         )
         self.db.add(snap)
@@ -110,7 +165,6 @@ def log_agent(agent, status, message):
     db.commit()
 
 
-# ─── Scanner ─────────────────────────────────────────────────
 def run_scanner():
     log_agent("scanner", "running", "Scanning Polymarket markets...")
     log_activity("scanner", "SCANNING", "Fetching active markets from Polymarket Gamma API...")
@@ -144,33 +198,26 @@ def run_scanner():
                 condition_id = m.get("conditionId")
                 if not condition_id:
                     continue
-
                 end_date = m.get("endDate") or m.get("endDateIso")
                 if not end_date:
                     continue
-
                 try:
                     end_dt = datetime.fromisoformat(end_date.replace("Z", "+00:00"))
                     hours = (end_dt - now).total_seconds() / 3600
                 except Exception:
                     continue
-
                 if hours < Config.MIN_HOURS or hours > Config.MAX_HOURS:
                     continue
-
                 volume = float(m.get("volume", 0) or 0)
                 if volume < Config.MIN_VOLUME:
                     continue
-
                 best_bid = float(m.get("bestBid", 0) or 0)
                 best_ask = float(m.get("bestAsk", 1) or 1)
                 if best_bid <= 0 or best_ask <= 0:
                     continue
-
                 price = round((best_bid + best_ask) / 2, 4)
                 if price <= 0 or price >= 1:
                     continue
-
                 scored.append({
                     "condition_id": condition_id,
                     "question": m.get("question", ""),
@@ -201,7 +248,6 @@ def run_scanner():
         return []
 
 
-# ─── Brain ───────────────────────────────────────────────────
 def run_brain():
     log_agent("brain", "running", "Evaluating markets with Claude...")
     try:
@@ -212,12 +258,12 @@ def run_brain():
                 queue = json.load(f)
         except FileNotFoundError:
             log_agent("brain", "idle", "No queue.json found")
-            log_activity("brain", "SKIP", "No market queue found — scanner may not have run yet")
+            log_activity("brain", "SKIP", "No market queue found")
             return []
 
         if not queue:
             log_agent("brain", "idle", "Queue is empty")
-            log_activity("brain", "SKIP", "Market queue is empty — no candidates to evaluate")
+            log_activity("brain", "SKIP", "Market queue is empty")
             return []
 
         log_activity("brain", "EVALUATING",
@@ -240,26 +286,17 @@ def run_brain():
                 detail="Price: {} | {}h remaining | Vol: ${:,.0f}".format(price, hours, volume))
 
             try:
-                prompt = (
-                    "Evaluate this prediction market for a trading opportunity.\n\n"
-                    "Market: {}\n"
-                    "Current price: {} (implies {}% probability)\n"
-                    "Hours until resolution: {}\n"
-                    "Volume: ${:,.0f}\n\n"
-                    "Analyze for mispricing. Respond ONLY with valid JSON, no markdown:\n"
-                    "{{\n"
-                    '  "our_probability": 0.XX,\n'
-                    '  "market_price": {},\n'
-                    '  "edge": 0.XX,\n'
-                    '  "direction": "OVER" or "UNDER",\n'
-                    '  "confidence": 0-100,\n'
-                    '  "crowd_error": "brief description of crowd mistake or null",\n'
-                    '  "base_rate_note": "brief base rate observation",\n'
-                    '  "thesis": "one sentence trading thesis",\n'
-                    '  "action": "BUY" or "SKIP"\n'
-                    "}}\n\n"
-                    "Set action=SKIP if edge < 0.07 or confidence < 70."
-                ).format(q, price, round(price * 100), hours, volume, price)
+                prompt = "Evaluate this prediction market for a trading opportunity.\n\n"
+                prompt += "Market: {}\n".format(q)
+                prompt += "Current price: {} (implies {}% probability)\n".format(price, round(price * 100))
+                prompt += "Hours until resolution: {}\n".format(hours)
+                prompt += "Volume: ${:,.0f}\n\n".format(volume)
+                prompt += "Analyze for mispricing. Respond ONLY with valid JSON, no markdown, no extra text:\n"
+                prompt += '{"our_probability": 0.55, "market_price": ' + str(price) + ', '
+                prompt += '"edge": 0.10, "direction": "OVER", '
+                prompt += '"confidence": 75, "crowd_error": "describe error or null", '
+                prompt += '"base_rate_note": "brief note", "thesis": "one sentence", "action": "BUY"}'
+                prompt += "\n\nReplace all values with your real analysis. Set action to SKIP if edge < 0.07 or confidence < 70."
 
                 response = claude.messages.create(
                     model=Config.CLAUDE_MODEL,
@@ -287,11 +324,10 @@ def run_brain():
                         market=q,
                         detail="Our est: {:.1%} | Mkt: {:.1%} | Edge: {:.3f} | Conf: {}{}".format(
                             our_prob, price, edge, confidence,
-                            " | " + crowd_error if crowd_error else ""))
+                            " | " + str(crowd_error) if crowd_error else ""))
                     skipped += 1
                     continue
 
-                # Thesis generated
                 result["condition_id"] = market["condition_id"]
                 result["question"] = q
                 theses.append(result)
@@ -301,13 +337,13 @@ def run_brain():
                     "Edge: {:+.3f} ({})".format(edge, direction),
                     "Confidence: {}/100".format(confidence),
                 ]
-                if crowd_error:
+                if crowd_error and crowd_error != "null":
                     detail_parts.append("Crowd error: {}".format(crowd_error))
                 if base_rate:
                     detail_parts.append("Base rate: {}".format(base_rate))
 
                 log_activity("brain", "THESIS",
-                    "THESIS GENERATED — {}".format(thesis),
+                    "THESIS — {}".format(thesis),
                     market=q,
                     detail=" | ".join(detail_parts))
 
@@ -317,13 +353,13 @@ def run_brain():
                 log_activity("brain", "ERROR",
                     "Evaluation failed: {}".format(str(e)[:80]),
                     market=q)
-                logger.debug("Brain failed on market: {}".format(e))
+                logger.debug("Brain failed: {}".format(e))
                 continue
 
         with open("thesis.json", "w") as f:
             json.dump(theses, f, indent=2)
 
-        msg = "{} theses generated, {} skipped (from {} evaluated)".format(
+        msg = "{} theses, {} skipped (from {} evaluated)".format(
             len(theses), skipped, min(len(queue), 20))
         log_agent("brain", "idle", "Brain complete: " + msg)
         log_activity("brain", "EVALUATING",
@@ -339,7 +375,6 @@ def run_brain():
         return []
 
 
-# ─── Executor ────────────────────────────────────────────────
 def kelly_size(p_win, market_price, bankroll):
     if not (0 < market_price < 1) or not (0 < p_win < 1):
         return 0.0
@@ -372,7 +407,7 @@ def run_executor():
 
         log_activity("executor", "TRADE",
             "Reviewing {} theses for execution".format(len(theses)),
-            detail="Bankroll: ${:.2f} | Open positions: {}/{}".format(
+            detail="Bankroll: ${:.2f} | Open: {}/{}".format(
                 balance, portfolio.get_open_count(), Config.MAX_OPEN_POSITIONS))
 
         for thesis in theses:
@@ -385,9 +420,6 @@ def run_executor():
                 id=condition_id, status="OPEN"
             ).first()
             if existing:
-                log_activity("executor", "SKIP",
-                    "Already in position — skipping",
-                    market=q)
                 continue
 
             size = kelly_size(
@@ -398,10 +430,8 @@ def run_executor():
 
             if size < 10:
                 log_activity("executor", "SKIP",
-                    "Kelly size ${:.2f} too small — skipping".format(size),
-                    market=q,
-                    detail="Kelly fraction: {:.2%} of ${:.0f} bankroll".format(
-                        size / balance if balance > 0 else 0, balance))
+                    "Kelly size ${:.2f} too small".format(size),
+                    market=q)
                 continue
 
             ok, reason = risk.can_trade(
@@ -414,15 +444,11 @@ def run_executor():
 
             if not ok:
                 log_activity("executor", "SKIP",
-                    "Risk block: {}".format(reason),
-                    market=q)
-                logger.warning("Risk block: {}".format(reason))
+                    "Risk block: {}".format(reason), market=q)
                 continue
 
             order_id = "PAPER-{}-{}".format(
-                condition_id[:8],
-                int(datetime.utcnow().timestamp())
-            )
+                condition_id[:8], int(datetime.utcnow().timestamp()))
 
             position = Position(
                 id=condition_id,
@@ -451,20 +477,15 @@ def run_executor():
             placed += 1
 
             log_activity("executor", "TRADE",
-                "{} PAPER TRADE — ${:.2f} @ {:.3f}".format(
-                    "📝" if Config.PAPER_TRADING else "🟢",
-                    size, thesis.get("market_price", 0)),
+                "PAPER TRADE — ${:.2f} @ {:.3f}".format(size, thesis.get("market_price", 0)),
                 market=q,
-                detail="Kelly: {:.1%} | Our prob: {:.1%} | Edge: {:+.3f} | Thesis: {}".format(
+                detail="Kelly: {:.1%} | Our prob: {:.1%} | Edge: {:+.3f} | {}".format(
                     size / balance if balance > 0 else 0,
                     thesis.get("our_probability", 0),
                     thesis.get("edge", 0),
                     thesis.get("thesis", "")[:60]))
 
-        msg = "{} paper trades placed".format(placed)
-        log_agent("executor", "idle", "Executor done: " + msg)
-        if placed == 0 and theses:
-            log_activity("executor", "TRADE", "No new trades placed — all blocked by risk or already open")
+        log_agent("executor", "idle", "Executor done: {} placed".format(placed))
 
     except Exception as e:
         msg = "Executor error: {}".format(e)
@@ -473,7 +494,6 @@ def run_executor():
         logger.error(msg)
 
 
-# ─── Exit Monitor ────────────────────────────────────────────
 def run_exit_monitor():
     log_agent("exit_monitor", "running", "Checking exit conditions...")
     try:
@@ -485,23 +505,20 @@ def run_exit_monitor():
             log_agent("exit_monitor", "idle", "No open positions to monitor")
             return
 
-        log_activity("exit_monitor", "EXIT",
-            "Monitoring {} open positions".format(len(open_positions)))
-
         exits = 0
 
         for pos in open_positions:
             try:
-                url = "https://gamma-api.polymarket.com/markets"
-                params = {"conditionId": pos.id}
-                r = http_requests.get(url, params=params, timeout=10)
-                data = r.json()
-                if data:
-                    market = data[0] if isinstance(data, list) else data
-                    best_bid = float(market.get("bestBid", 0) or 0)
-                    best_ask = float(market.get("bestAsk", 1) or 1)
-                    if best_bid > 0 and best_ask > 0:
-                        current_price = round((best_bid + best_ask) / 2, 4)
+                # Use CLOB API — Gamma API conditionId filter is broken
+                r = http_requests.get(
+                    "https://clob.polymarket.com/markets/{}".format(pos.id),
+                    timeout=10
+                )
+                if r.status_code == 200:
+                    data = r.json()
+                    tokens = data.get("tokens", [])
+                    if tokens:
+                        current_price = round(float(tokens[0].get("price", pos.current_price)), 4)
                         pos.current_price = current_price
                         db.commit()
 
@@ -515,7 +532,7 @@ def run_exit_monitor():
                 if current_price >= target:
                     should_exit = True
                     exit_reason = "TARGET_HIT"
-                elif current_price <= pos.entry_price * 0.75:
+                elif pos.entry_price > 0 and current_price <= pos.entry_price * 0.75:
                     should_exit = True
                     exit_reason = "STOP_LOSS"
                 elif hours_held > Config.STALE_HOURS:
@@ -533,7 +550,7 @@ def run_exit_monitor():
                         condition_id=pos.id,
                         side="SELL",
                         price=current_price,
-                        size=pos.size_usd / pos.entry_price,
+                        size=pos.size_usd / pos.entry_price if pos.entry_price > 0 else 0,
                         order_id="EXIT-{}".format(exit_reason),
                         paper=Config.PAPER_TRADING
                     )
@@ -542,17 +559,14 @@ def run_exit_monitor():
                     exits += 1
 
                     log_activity("exit_monitor", "EXIT",
-                        "CLOSED [{reason}] — PnL: ${pnl:+.2f}".format(
-                            reason=exit_reason, pnl=pnl),
+                        "CLOSED [{}] PnL: ${:+.2f}".format(exit_reason, pnl),
                         market=pos.question,
                         detail="Entry: {:.3f} → Exit: {:.3f} | Held: {:.1f}h | Size: ${:.0f}".format(
                             pos.entry_price, current_price, hours_held, pos.size_usd))
                 else:
-                    # Log current status for active positions
-                    pnl_pct = (current_price - pos.entry_price) / pos.entry_price * 100
+                    pnl_pct = (current_price - pos.entry_price) / pos.entry_price * 100 if pos.entry_price > 0 else 0
                     log_activity("exit_monitor", "EXIT",
-                        "Watching — {:.1f}h held | PnL: ${:+.2f} ({:+.1f}%)".format(
-                            hours_held, pnl, pnl_pct),
+                        "Watching — {:.1f}h held | PnL: ${:+.2f} ({:+.1f}%)".format(hours_held, pnl, pnl_pct),
                         market=pos.question,
                         detail="Price: {:.3f} | Target: {:.3f} | Stop: {:.3f}".format(
                             current_price,
@@ -563,8 +577,8 @@ def run_exit_monitor():
                 logger.debug("Exit check failed: {}".format(e))
                 continue
 
-        msg = "Exit check: {} closed, {} open".format(exits, len(open_positions) - exits)
-        log_agent("exit_monitor", "idle", msg)
+        log_agent("exit_monitor", "idle",
+            "Exit check: {} closed, {} open".format(exits, len(open_positions) - exits))
 
     except Exception as e:
         msg = "Exit monitor error: {}".format(e)
@@ -573,14 +587,11 @@ def run_exit_monitor():
         logger.error(msg)
 
 
-# ─── Whale Monitor ───────────────────────────────────────────
 def run_whale_monitor():
     log_agent("whale_monitor", "idle", "Monitoring markets for whale activity")
-    log_activity("whale_monitor", "SCANNING",
-        "Polling 50 tracked wallets for new position entries")
+    log_activity("whale_monitor", "SCANNING", "Polling 50 tracked wallets for new entries")
 
 
-# ─── Main ────────────────────────────────────────────────────
 def main():
     logger.info("=" * 50)
     logger.info("POLYBOT STARTING - {}".format("PAPER" if Config.PAPER_TRADING else "LIVE"))
@@ -605,9 +616,8 @@ def main():
     log_agent("whale_monitor", "idle", "Bot started")
 
     log_activity("scanner", "SCANNING",
-        "PolyBot started in {} mode — beginning initial scan".format(
-            "PAPER" if Config.PAPER_TRADING else "LIVE"),
-        detail="Server: Hetzner Nuremberg | Model: {} | Bankroll: $1,000".format(Config.CLAUDE_MODEL))
+        "PolyBot started in {} mode".format("PAPER" if Config.PAPER_TRADING else "LIVE"),
+        detail="Model: {} | Initial balance: ${}".format(Config.CLAUDE_MODEL, INITIAL_BALANCE))
 
     logger.info("Running initial scan...")
     run_scanner()
