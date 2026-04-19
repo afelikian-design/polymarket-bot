@@ -308,7 +308,7 @@ export default function Dashboard() {
                   <div key={name} style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",padding:"8px 0",borderBottom:"1px solid #0c1820"}}>
                     <div>
                       <div style={{fontSize:10,color:"#ffffff",marginBottom:2}}>{name.replace(/_/g," ").toUpperCase()}</div>
-                      <div style={{fontSize:10,color:"#8ab8c8",lineHeight:1.4,maxWidth:220}}>{a.message}</div>
+                      <div style={{fontSize:10,color:"#c8d8e0",lineHeight:1.4,maxWidth:220}}>{a.message}</div>
                     </div>
                     <div style={{display:"flex",alignItems:"center",gap:5,flexShrink:0}}>
                       <div style={{width:6,height:6,borderRadius:"50%",background:a.status==="running"?"#00ff8c":a.status==="error"?"#ff4455":"#8ab8c8",boxShadow:a.status==="running"?"0 0 5px #00ff8c":"none"}} className={a.status==="running"?"pulse":""}/>
@@ -318,18 +318,60 @@ export default function Dashboard() {
                 ))}
               </div>
 
+              {/* Category Exposure */}
+              <div className="mob-card">
+                <div style={{fontSize:10,color:"#8ab8c8",letterSpacing:".14em",marginBottom:8}}>EXPOSURE BY CATEGORY</div>
+                {[
+                  {cat:"CRYPTO",  color:"#0088ff", pct: POSITIONS.filter(p=>["bitcoin","eth","sol","crypto","btc","ethereum","solana"].some(k=>p.question?.toLowerCase().includes(k))).length / Math.max(POSITIONS.length,1)},
+                  {cat:"SPORTS",  color:"#aa66ff", pct: POSITIONS.filter(p=>["blazers","spurs","lakers","celtics","nba","nfl","nhl","mlb","vs."].some(k=>p.question?.toLowerCase().includes(k))).length / Math.max(POSITIONS.length,1)},
+                  {cat:"POLITICS",color:"#00cc66", pct: POSITIONS.filter(p=>["trump","biden","election","iran","diplomatic","senate"].some(k=>p.question?.toLowerCase().includes(k))).length / Math.max(POSITIONS.length,1)},
+                  {cat:"ESPORTS", color:"#ff6644", pct: POSITIONS.filter(p=>["lol:","valorant","csgo","gen.g","lck","bo3"].some(k=>p.question?.toLowerCase().includes(k))).length / Math.max(POSITIONS.length,1)},
+                ].map(({cat,color,pct})=>(
+                  <div key={cat} style={{display:"flex",alignItems:"center",gap:8,marginBottom:4}}>
+                    <span style={{fontSize:9,color:"#6a9090",width:56,flexShrink:0}}>{cat}</span>
+                    <div style={{flex:1,height:4,background:"#0c1c28",borderRadius:2}}>
+                      <div style={{width:`${Math.round(pct*100)}%`,height:4,background:color,borderRadius:2}}/>
+                    </div>
+                    <span style={{fontSize:9,color:color,width:28,textAlign:"right",flexShrink:0}}>{Math.round(pct*100)}%</span>
+                  </div>
+                ))}
+              </div>
+
               {/* Risk engine */}
               <div className="mob-card">
                 <div style={{fontSize:10,color:"#8ab8c8",letterSpacing:".14em",marginBottom:8}}>RISK ENGINE</div>
-                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
-                  {[["Kelly Cap","10%"],["Daily Loss","−10%"],["Max Draw","−20%"],["Open Pos",`${portfolio.open_positions}/10`]].map(([l,v])=>(
-                    <div key={l} style={{display:"flex",justifyContent:"space-between",padding:"6px 10px",background:"#07090c",borderRadius:6}}>
-                      <span style={{fontSize:10,color:"#8ab8c8"}}>{l}</span>
-                      <span style={{fontSize:10,color:"#00ff8c",fontWeight:500}}>{v}</span>
+                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:6}}>
+                  {[["Kelly Cap","10%"],["Daily Loss","−10%"],["Max Draw","−20%"],["Open Pos",`${portfolio.open_positions}/20`]].map(([l,v])=>(
+                    <div key={l} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"6px 10px",background:"#07090c",borderRadius:6,border:"1px solid #0c1820"}}>
+                      <span style={{fontSize:9,color:"#8ab8c8"}}>{l}</span>
+                      <span style={{fontSize:11,fontWeight:700,color:v.startsWith("−")||v.startsWith("-")?"#ff4455":v.includes("/")?"#80c8e0":"#00ff8c"}}>{v}</span>
                     </div>
                   ))}
                 </div>
               </div>
+
+              {/* Strategy Intelligence */}
+              {insights&&(
+                <div className="mob-card">
+                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
+                    <span style={{fontSize:10,color:"#8ab8c8",letterSpacing:".14em"}}>STRATEGY INTELLIGENCE</span>
+                    {insights.analyzed_at&&<span style={{fontSize:9,color:"#243848"}}>{new Date(insights.analyzed_at).toLocaleTimeString("en-US",{timeZone:"America/Los_Angeles",hour:"2-digit",minute:"2-digit"})}</span>}
+                  </div>
+                  <div style={{fontSize:10,color:"#8ab8c8",lineHeight:1.5,marginBottom:8}}>{insights.summary}</div>
+                  {(insights.warnings||[]).map((w,i)=>(
+                    <div key={i} style={{display:"flex",gap:6,marginBottom:4}}>
+                      <span style={{color:"#ff4455",fontSize:10,flexShrink:0}}>⚠</span>
+                      <span style={{fontSize:10,color:"#ff6070",lineHeight:1.4}}>{w}</span>
+                    </div>
+                  ))}
+                  {(insights.recommendations||[]).map((r,i)=>(
+                    <div key={i} style={{display:"flex",gap:6,marginBottom:4}}>
+                      <span style={{color:"#00a858",fontSize:10,flexShrink:0}}>⚡</span>
+                      <span style={{fontSize:10,color:"#00c86e",lineHeight:1.4}}>{r}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           )}
 
