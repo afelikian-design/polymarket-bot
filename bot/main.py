@@ -375,7 +375,7 @@ def run_brain():
         return []
 
 
-def kelly_size(p_win, market_price, bankroll):
+def kelly_size(p_win, market_price, bankroll, confidence=50):
     if not (0 < market_price < 1) or not (0 < p_win < 1):
         return 0.0
     b = (1 / market_price) - 1
@@ -383,7 +383,11 @@ def kelly_size(p_win, market_price, bankroll):
     f = (p_win * b - q) / b
     if f <= 0:
         return 0.0
-    return round(bankroll * min(f, Config.MAX_KELLY_FRACTION), 2)
+    # Scale Kelly fraction by confidence (50=min -> 100=max)
+    # confidence 50 = 50% of MAX_KELLY, confidence 100 = 100% of MAX_KELLY
+    conf_scalar = 0.5 + (min(max(confidence, 50), 100) - 50) / 100.0
+    max_fraction = Config.MAX_KELLY_FRACTION * conf_scalar
+    return round(bankroll * min(f, max_fraction), 2)
 
 
 def run_executor():
@@ -425,7 +429,8 @@ def run_executor():
             size = kelly_size(
                 p_win=thesis.get("our_probability", 0),
                 market_price=thesis.get("market_price", 0.5),
-                bankroll=balance
+                bankroll=balance,
+                confidence=thesis.get("confidence", 50)
             )
 
             if size < 10:
