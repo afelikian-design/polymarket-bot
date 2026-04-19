@@ -108,24 +108,21 @@ const CatBadge = ({cat}) => (
 
 function WhaleCard({w}) {
   return (
-    <div style={{background:"#09090e",border:"1px solid #0c1820",borderRadius:4,marginBottom:5,padding:"7px 10px"}}>
-      <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:4}}>
-        <div style={{width:5,height:5,borderRadius:"50%",background:w.active?"#00ff8c":"#8ab8c8",boxShadow:w.active?"0 0 5px #00ff8c":"none",flexShrink:0}}/>
-        <span style={{fontSize:9,color:"#c8d8e0",flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{w.address}</span>
-        <TierBadge tier={w.tier}/>
-      </div>
-      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:4}}>
-        {[["WIN",fmtPct(w.win_rate),"#00a858"],["PnL",fmtK(w.total_pnl),"#f0c070"],["TRD",w.total_trades,"#80c8e0"]].map(([l,v,c])=>(
-          <div key={l} style={{display:"flex",alignItems:"baseline",gap:4}}>
-            <span style={{fontSize:7,color:"#4a6070",letterSpacing:".1em"}}>{l}</span>
-            <span style={{fontSize:10,color:c,fontWeight:500}}>{v}</span>
-          </div>
-        ))}
-      </div>
-      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginTop:4}}>
-        <CatBadge cat={w.best_category}/>
-        <div style={{background:"#0d1018",height:2,borderRadius:1,width:60}}>
-          <div style={{background:TC[w.tier],height:"100%",width:fmtPct(w.win_rate),borderRadius:1,opacity:.7}}/>
+    <div style={{padding:"4px 0",borderBottom:"1px solid #0a0c10",display:"flex",alignItems:"center",gap:5}}>
+      <div style={{width:5,height:5,borderRadius:"50%",background:w.active?"#00ff8c":"#2a4858",boxShadow:w.active?"0 0 4px #00ff8c":"none",flexShrink:0}}/>
+      <div style={{flex:1,minWidth:0}}>
+        <div style={{display:"flex",alignItems:"center",gap:4,marginBottom:1}}>
+          <span style={{fontSize:7,color:"#7ab0c8",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",flex:1}}>{w.address}</span>
+          <TierBadge tier={w.tier}/>
+        </div>
+        <div style={{display:"flex",alignItems:"center",gap:5}}>
+          <span style={{fontSize:7,color:"#00a858",fontWeight:700}}>{fmtPct(w.win_rate)}</span>
+          <span style={{fontSize:6,color:"#3a5060"}}>WIN</span>
+          <span style={{fontSize:7,color:"#f0c070",fontWeight:700}}>{fmtK(w.total_pnl)}</span>
+          <span style={{fontSize:6,color:"#3a5060"}}>PNL</span>
+          <span style={{fontSize:7,color:"#80c8e0",fontWeight:700}}>{w.total_trades}</span>
+          <span style={{fontSize:6,color:"#3a5060"}}>TRD</span>
+          <CatBadge cat={w.best_category}/>
         </div>
       </div>
     </div>
@@ -516,15 +513,15 @@ export default function Dashboard() {
         <div style={{background:"#070a0d",borderRight:"1px solid #0c1c28",padding:"14px 11px",overflowY:"auto",display:"flex",flexDirection:"column",gap:7}}>
           <div style={{fontSize:8,color:"#8ab8c8",letterSpacing:".2em",marginBottom:4}}>AGENTS</div>
           {Object.entries(agentData).map(([name,a])=>(
-            <div key={name} style={{padding:"8px 10px",background:"#0a0d12",border:`1px solid ${a.status==="running"?"#0a2418":"#0c1820"}`,borderRadius:3}}>
-              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:4}}>
-                <span style={{fontSize:9,color:"#ffffff",letterSpacing:".06em"}}>{name.replace(/_/g," ").toUpperCase()}</span>
-                <div style={{display:"flex",alignItems:"center",gap:4}}>
-                  <div style={{width:5,height:5,borderRadius:"50%",background:a.status==="running"?"#00ff8c":a.status==="error"?"#ff4455":"#8ab8c8",boxShadow:a.status==="running"?"0 0 5px #00ff8c":"none"}} className={a.status==="running"?"pulse":""}/>
-                  <span style={{fontSize:8,color:a.status==="running"?"#00cc70":a.status==="error"?"#ff4455":"#c8d8e0",letterSpacing:".1em"}}>{a.status?.toUpperCase()}</span>
+            <div key={name} style={{padding:"4px 8px",borderBottom:"1px solid #0a0c10",display:"flex",alignItems:"center",gap:6}}>
+              <div style={{width:5,height:5,borderRadius:"50%",flexShrink:0,background:a.status==="running"?"#00ff8c":a.status==="error"?"#ff4455":"#304858",boxShadow:a.status==="running"?"0 0 4px #00ff8c":"none"}} className={a.status==="running"?"pulse":""}/>
+              <div style={{flex:1,minWidth:0}}>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                  <span style={{fontSize:7,color:"#8ab8c8",letterSpacing:".06em",fontWeight:700}}>{name.replace(/_/g," ").toUpperCase()}</span>
+                  <span style={{fontSize:6,color:a.status==="running"?"#00cc70":a.status==="error"?"#ff4455":"#304858",letterSpacing:".08em"}}>{a.status?.toUpperCase()}</span>
                 </div>
+                <div style={{fontSize:6,color:"#4a6070",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",marginTop:1}}>{a.message}</div>
               </div>
-              <div style={{fontSize:9,color:"#c8d8e0",lineHeight:1.5}}>{a.message}</div>
             </div>
           ))}
           <div style={{marginTop:8}}>
