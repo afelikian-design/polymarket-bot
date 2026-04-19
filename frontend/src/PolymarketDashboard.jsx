@@ -322,10 +322,11 @@ export default function Dashboard() {
               <div className="mob-card">
                 <div style={{fontSize:10,color:"#8ab8c8",letterSpacing:".14em",marginBottom:8}}>EXPOSURE BY CATEGORY</div>
                 {[
-                  {cat:"CRYPTO",  color:"#0088ff", pct: POSITIONS.filter(p=>["bitcoin","eth","sol","crypto","btc","ethereum","solana"].some(k=>p.question?.toLowerCase().includes(k))).length / Math.max(POSITIONS.length,1)},
-                  {cat:"SPORTS",  color:"#aa66ff", pct: POSITIONS.filter(p=>["blazers","spurs","lakers","celtics","nba","nfl","nhl","mlb","vs."].some(k=>p.question?.toLowerCase().includes(k))).length / Math.max(POSITIONS.length,1)},
-                  {cat:"POLITICS",color:"#00cc66", pct: POSITIONS.filter(p=>["trump","biden","election","iran","diplomatic","senate"].some(k=>p.question?.toLowerCase().includes(k))).length / Math.max(POSITIONS.length,1)},
-                  {cat:"ESPORTS", color:"#ff6644", pct: POSITIONS.filter(p=>["lol:","valorant","csgo","gen.g","lck","bo3"].some(k=>p.question?.toLowerCase().includes(k))).length / Math.max(POSITIONS.length,1)},
+                  {cat:"CRYPTO",  color:"#0088ff", pct: POSITIONS.filter(p=>["bitcoin","eth","sol","crypto","btc","ethereum","solana","xrp","up or down"].some(k=>p.question?.toLowerCase().includes(k))).length / Math.max(POSITIONS.length,1)},
+                  {cat:"SPORTS",  color:"#aa66ff", pct: POSITIONS.filter(p=>["blazers","spurs","lakers","celtics","nba","nfl","nhl","mlb","vs.","o/u","rebounds","goals"].some(k=>p.question?.toLowerCase().includes(k))).length / Math.max(POSITIONS.length,1)},
+                  {cat:"POLITICS",color:"#00cc66", pct: POSITIONS.filter(p=>["trump","biden","election","iran","diplomatic","senate","tariff","minister","vote"].some(k=>p.question?.toLowerCase().includes(k))).length / Math.max(POSITIONS.length,1)},
+                  {cat:"MACRO",   color:"#f0c070", pct: POSITIONS.filter(p=>["fed","rate","inflation","strait","hormuz","ships","transit","oil","gold","bond","gdp"].some(k=>p.question?.toLowerCase().includes(k))).length / Math.max(POSITIONS.length,1)},
+                  {cat:"ESPORTS", color:"#ff6644", pct: POSITIONS.filter(p=>["lol:","valorant","csgo","gen.g","lck","bo3","mobile legends"].some(k=>p.question?.toLowerCase().includes(k))).length / Math.max(POSITIONS.length,1)},
                 ].map(({cat,color,pct})=>(
                   <div key={cat} style={{display:"flex",alignItems:"center",gap:8,marginBottom:4}}>
                     <span style={{fontSize:9,color:"#6a9090",width:56,flexShrink:0}}>{cat}</span>
@@ -719,11 +720,11 @@ export default function Dashboard() {
           <div style={{padding:"8px 12px",borderBottom:"1px solid #0c1c28",flexShrink:0}}>
             <div style={{fontSize:7,color:"#4a6070",letterSpacing:".18em",marginBottom:6}}>CURRENT EXPOSURE BY CATEGORY</div>
             {[
-              {cat:"CRYPTO",  color:"#0088ff", pct: POSITIONS.filter(p=>["crypto","btc","eth","sol","bitcoin","ethereum","solana","binance","usdc","token"].some(k=>p.question?.toLowerCase().includes(k))).length / Math.max(POSITIONS.length,1)},
-              {cat:"SPORTS",  color:"#aa66ff", pct: POSITIONS.filter(p=>["ufc","nfl","nba","nhl","mlb","soccer","football","basketball","blazers","spurs","lakers","celtics","warriors","knicks","bulls","heat","nets","vs.","fight night","match"].some(k=>p.question?.toLowerCase().includes(k))).length / Math.max(POSITIONS.length,1)},
-              {cat:"POLITICS",color:"#00cc66", pct: POSITIONS.filter(p=>["trump","biden","senate","congress","election","president","democrat","republican","vote","poll","iran","diplomatic"].some(k=>p.question?.toLowerCase().includes(k))).length / Math.max(POSITIONS.length,1)},
-              {cat:"MACRO",   color:"#f0c070", pct: POSITIONS.filter(p=>["fed","rate","cpi","gdp","inflation","interest","recession","treasury","bond","dollar","tariff","trade"].some(k=>p.question?.toLowerCase().includes(k))).length / Math.max(POSITIONS.length,1)},
-              {cat:"ESPORTS", color:"#ff6644", pct: POSITIONS.filter(p=>["valorant","dota","csgo","lol:","league of legends","esport","gaming","gen.g","nongshim","bo3","bo5","lck","lcs","lec","fnatic","t1","c9"].some(k=>p.question?.toLowerCase().includes(k))).length / Math.max(POSITIONS.length,1)},
+              {cat:"CRYPTO",  color:"#0088ff", pct: POSITIONS.filter(p=>["crypto","btc","eth","sol","bitcoin","ethereum","solana","binance","usdc","token","xrp","bnb","up or down"].some(k=>p.question?.toLowerCase().includes(k))).length / Math.max(POSITIONS.length,1)},
+              {cat:"SPORTS",  color:"#aa66ff", pct: POSITIONS.filter(p=>["ufc","nfl","nba","nhl","mlb","soccer","football","basketball","blazers","spurs","lakers","celtics","warriors","knicks","bulls","heat","nets","vs.","fight night","match","o/u","over","under","rebounds","points","goals","innings"].some(k=>p.question?.toLowerCase().includes(k))).length / Math.max(POSITIONS.length,1)},
+              {cat:"POLITICS",color:"#00cc66", pct: POSITIONS.filter(p=>["trump","biden","senate","congress","election","president","democrat","republican","vote","poll","iran","diplomatic","tariff","sanctions","treaty","prime minister","chancellor","minister"].some(k=>p.question?.toLowerCase().includes(k))).length / Math.max(POSITIONS.length,1)},
+              {cat:"MACRO",   color:"#f0c070", pct: POSITIONS.filter(p=>["fed","rate","cpi","gdp","inflation","interest","recession","treasury","bond","dollar","trade","strait","hormuz","ships","transit","oil","barrel","opec","currency","yuan","euro","yen","gold","silver"].some(k=>p.question?.toLowerCase().includes(k))).length / Math.max(POSITIONS.length,1)},
+              {cat:"ESPORTS", color:"#ff6644", pct: POSITIONS.filter(p=>["valorant","dota","csgo","lol:","league of legends","esport","gaming","gen.g","nongshim","bo3","bo5","lck","lcs","lec","fnatic","t1","c9","mobile legends","mlbb","mpl"].some(k=>p.question?.toLowerCase().includes(k))).length / Math.max(POSITIONS.length,1)},
             ].map(({cat,color,pct})=>(
               <div key={cat} style={{display:"flex",alignItems:"center",gap:6,marginBottom:3}}>
                 <span style={{fontSize:7,color:"#6a9090",width:52,flexShrink:0}}>{cat}</span>
