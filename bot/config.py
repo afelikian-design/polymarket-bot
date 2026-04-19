@@ -23,7 +23,7 @@ class Config:
     MIN_LIQUIDITY       = 2000
     MIN_PRICE           = 0.10
     MAX_PRICE           = 0.90
-    DAILY_LOSS_LIMIT    = -0.10
+    DAILY_LOSS_LIMIT    = -0.25
     MAX_DRAWDOWN        = -0.50
 
     MIN_GAP             = 0.05
