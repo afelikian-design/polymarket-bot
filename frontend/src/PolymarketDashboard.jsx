@@ -96,12 +96,12 @@ const ET = {
 };
 
 const TierBadge = ({tier}) => (
-  <span style={{fontSize:9,padding:"2px 7px",borderRadius:2,letterSpacing:".12em",background:TB[tier],color:TC[tier],border:`1px solid ${TC[tier]}28`,fontWeight:600}}>
+  <span style={{fontSize:6,padding:"1px 4px",borderRadius:2,letterSpacing:".12em",background:TB[tier],color:TC[tier],border:`1px solid ${TC[tier]}28`,fontWeight:700}}>
     T{tier} {TL[tier]}
   </span>
 );
 const CatBadge = ({cat}) => (
-  <span style={{fontSize:9,padding:"2px 6px",borderRadius:2,letterSpacing:".1em",color:CC[cat]||"#5a7080",background:(CC[cat]||"#5a7080")+"18"}}>
+  <span style={{fontSize:6,padding:"1px 4px",borderRadius:2,letterSpacing:".1em",color:CC[cat]||"#5a7080",background:(CC[cat]||"#5a7080")+"18"}}>
     {cat?.toUpperCase()}
   </span>
 );
@@ -420,7 +420,7 @@ export default function Dashboard() {
                 return(
                   <div key={log.id} className={`mob-card ${i===0&&newActivity?"flashrow":""}`} style={{padding:"10px 12px",marginBottom:8}}>
                     <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:log.market?4:0}}>
-                      <span style={{fontSize:9,padding:"2px 6px",borderRadius:3,background:et.color+"18",color:et.color,flexShrink:0}}>{et.icon} {et.label}</span>
+                      <span style={{fontSize:6,padding:"1px 4px",borderRadius:3,background:et.color+"18",color:et.color,flexShrink:0}}>{et.icon} {et.label}</span>
                       <span style={{fontSize:9,color:"#4a7080",flexShrink:0}}>{log.agent?.replace(/_/g,"·")}</span>
                       <div style={{flex:1}}/>
                       <span style={{fontSize:9,color:"#243848"}}>{log.time_ago}</span>
