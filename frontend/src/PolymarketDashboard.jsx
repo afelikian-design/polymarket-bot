@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, ReferenceLine } from "recharts";
 
-const API_BASE = "https://able-grove-movement-generations.trycloudflare.com";
+const API_BASE = "https://api.feliksbot.com";
 
 const TIMEFRAMES = [
   { label: "1H",  points: 12,  interval: 5  },
