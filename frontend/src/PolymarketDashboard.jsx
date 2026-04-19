@@ -523,11 +523,11 @@ export default function Dashboard() {
             </div>
           ))}
           <div style={{marginTop:8}}>
-            <div style={{fontSize:8,color:"#8ab8c8",letterSpacing:".2em",marginBottom:8}}>RISK ENGINE</div>
+            <div style={{fontSize:8,color:"#8ab8c8",letterSpacing:".2em",marginBottom:6}}>RISK ENGINE</div>
             {[["Kelly Cap","10%"],["Daily Loss","−10%"],["Max Draw","−20%"],["Open Pos",`${portfolio.open_positions}/10`]].map(([l,v])=>(
               <div key={l} style={{display:"flex",justifyContent:"space-between",padding:"3px 0",borderBottom:"1px solid #09090d"}}>
-                <span style={{fontSize:9,color:"#c8d8e0"}}>{l}</span>
-                <span style={{fontSize:9,color:"#00ff8c"}}>{v}</span>
+                <span style={{fontSize:7,color:"#c8d8e0"}}>{l}</span>
+                <span style={{fontSize:7,fontWeight:700,color:v.startsWith("−")||v.startsWith("-")?"#ff4455":v.includes("/")?"#80c8e0":"#00ff8c"}}>{v}</span>
               </div>
             ))}
           </div>
