@@ -965,15 +965,16 @@ export default function Dashboard() {
             ):activity.map((log,i)=>{
               const et=ET[log.event_type]||ET.SCANNING;
               return(
-                <div key={log.id} className={i===0&&newActivity?"flashrow":""} style={{padding:"5px 10px",borderBottom:"1px solid #0a0c10"}}>
-                  <div style={{display:"flex",alignItems:"center",gap:5,marginBottom:2}}>
-                    <span style={{fontSize:6,padding:"1px 4px",borderRadius:2,background:et.color+"18",color:et.color,whiteSpace:"nowrap",flexShrink:0,fontWeight:700}}>{et.icon} {et.label}</span>
-                    <span style={{fontSize:6,color:"#243848",whiteSpace:"nowrap",flexShrink:0}}>{log.logged_at?new Date(log.logged_at).toLocaleTimeString("en-US",{timeZone:"America/Los_Angeles",hour:"2-digit",minute:"2-digit"}):""}</span>
-                    <span style={{fontSize:6,color:"#243848",whiteSpace:"nowrap",marginLeft:"auto",flexShrink:0}}>{log.time_ago}</span>
+                <div key={log.id} className={i===0&&newActivity?"flashrow":""} style={{display:"flex",alignItems:"flex-start",gap:8,padding:"4px 12px",borderBottom:"1px solid #0a0c10"}}>
+                  <span style={{fontSize:8,color:"#243848",whiteSpace:"nowrap",marginTop:1,minWidth:52}}>{log.logged_at?new Date(log.logged_at).toLocaleTimeString("en-US",{timeZone:"America/Los_Angeles",hour:"2-digit",minute:"2-digit",second:"2-digit"}):""}</span>
+                  <span style={{fontSize:7,padding:"1px 5px",borderRadius:2,letterSpacing:".12em",background:et.color+"18",color:et.color,whiteSpace:"nowrap",marginTop:1,minWidth:46,textAlign:"center",flexShrink:0}}>{et.icon} {et.label}</span>
+                  <span style={{fontSize:8,color:"#4a7080",whiteSpace:"nowrap",marginTop:1,minWidth:60,flexShrink:0}}>{log.agent?.replace(/_/g,"·")}</span>
+                  <div style={{flex:1,minWidth:0}}>
+                    {log.market&&<div style={{fontSize:8,color:"#8ab8c8",marginBottom:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{log.market}</div>}
+                    <div style={{fontSize:9,color:et.color==="#4a5868"?"#506070":"#c8d8e0",lineHeight:1.4}}>{log.message}</div>
+                    {log.detail&&<div style={{fontSize:8,color:"#4a6070",marginTop:1,lineHeight:1.3}}>{log.detail}</div>}
                   </div>
-                  {log.market&&<div style={{fontSize:8,color:"#8ab8c8",marginBottom:2,lineHeight:1.3,whiteSpace:"normal"}}>{log.market}</div>}
-                  <div style={{fontSize:8,color:et.color==="#4a5868"?"#506070":"#c8d8e0",lineHeight:1.4,whiteSpace:"normal"}}>{log.message}</div>
-                  {log.detail&&<div style={{fontSize:7,color:"#4a6070",marginTop:2,lineHeight:1.3,whiteSpace:"normal"}}>{log.detail}</div>}
+                  <span style={{fontSize:7,color:"#243848",whiteSpace:"nowrap",marginTop:2,flexShrink:0}}>{log.time_ago}</span>
                 </div>
               );
             })}
