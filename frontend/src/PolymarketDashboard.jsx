@@ -193,7 +193,7 @@ export default function Dashboard() {
       } catch(e){ setApiError(true); }
     };
     fetchData();
-    const interval = setInterval(fetchData,15000);
+    const interval = setInterval(fetchData,5000);
     return()=>clearInterval(interval);
   },[]);
 
