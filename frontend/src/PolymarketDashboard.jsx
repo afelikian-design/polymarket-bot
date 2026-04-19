@@ -108,22 +108,28 @@ const CatBadge = ({cat}) => (
 
 function WhaleCard({w}) {
   return (
-    <div style={{padding:"4px 0",borderBottom:"1px solid #0a0c10",display:"flex",alignItems:"center",gap:5}}>
-      <div style={{width:5,height:5,borderRadius:"50%",background:w.active?"#00ff8c":"#2a4858",boxShadow:w.active?"0 0 4px #00ff8c":"none",flexShrink:0}}/>
-      <div style={{flex:1,minWidth:0}}>
-        <div style={{display:"flex",alignItems:"center",gap:4,marginBottom:1}}>
-          <span style={{fontSize:7,color:"#7ab0c8",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",flex:1}}>{w.address}</span>
-          <TierBadge tier={w.tier}/>
+    <div style={{padding:"5px 0",borderBottom:"1px solid #0a0d12"}}>
+      <div style={{display:"flex",alignItems:"center",gap:5,marginBottom:3}}>
+        <div style={{width:5,height:5,borderRadius:"50%",flexShrink:0,background:w.active?"#00ff8c":"#1e3040",boxShadow:w.active?"0 0 4px #00ff8c":"none"}}/>
+        <span style={{fontSize:7,color:"#7ab0c8",flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",fontWeight:700}}>{w.address}</span>
+        <TierBadge tier={w.tier}/>
+      </div>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:2,paddingLeft:10}}>
+        <div style={{display:"flex",flexDirection:"column"}}>
+          <span style={{fontSize:6,color:"#3a5060",letterSpacing:".08em"}}>WIN RATE</span>
+          <span style={{fontSize:8,color:"#00a858",fontWeight:700}}>{fmtPct(w.win_rate)}</span>
         </div>
-        <div style={{display:"flex",alignItems:"center",gap:5}}>
-          <span style={{fontSize:7,color:"#00a858",fontWeight:700}}>{fmtPct(w.win_rate)}</span>
-          <span style={{fontSize:6,color:"#3a5060"}}>WIN</span>
-          <span style={{fontSize:7,color:"#f0c070",fontWeight:700}}>{fmtK(w.total_pnl)}</span>
-          <span style={{fontSize:6,color:"#3a5060"}}>PNL</span>
-          <span style={{fontSize:7,color:"#80c8e0",fontWeight:700}}>{w.total_trades}</span>
-          <span style={{fontSize:6,color:"#3a5060"}}>TRD</span>
-          <CatBadge cat={w.best_category}/>
+        <div style={{display:"flex",flexDirection:"column"}}>
+          <span style={{fontSize:6,color:"#3a5060",letterSpacing:".08em"}}>PNL</span>
+          <span style={{fontSize:8,color:"#f0c070",fontWeight:700}}>{fmtK(w.total_pnl)}</span>
         </div>
+        <div style={{display:"flex",flexDirection:"column"}}>
+          <span style={{fontSize:6,color:"#3a5060",letterSpacing:".08em"}}>TRADES</span>
+          <span style={{fontSize:8,color:"#80c8e0",fontWeight:700}}>{w.total_trades}</span>
+        </div>
+      </div>
+      <div style={{paddingLeft:10,marginTop:3}}>
+        <CatBadge cat={w.best_category}/>
       </div>
     </div>
   );
