@@ -743,8 +743,6 @@ export default function Dashboard() {
         </div>
       </div>
     );
-  }
-
   // ── DESKTOP LAYOUT ────────────────────────────────────────
   return (
     <div style={{background:"#07090c",minHeight:"100vh",fontFamily:"'DM Mono',monospace",color:"#ffffff",overflow:"hidden"}}>
