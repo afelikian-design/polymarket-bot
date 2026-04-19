@@ -13,30 +13,32 @@ class Config:
     PAPER_TRADING       = os.getenv("PAPER_TRADING", "true").lower() == "true"
     SCAN_INTERVAL_SEC   = 300
     BRAIN_INTERVAL_SEC  = 60
-    EXIT_CHECK_SEC      = 30
+    EXIT_CHECK_SEC      = 5
     MAX_MARKETS_SCAN    = 500
 
     MAX_KELLY_FRACTION  = 0.10
     MIN_KELLY_FRACTION  = 0.01
-    MAX_OPEN_POSITIONS  = 10
+    MAX_OPEN_POSITIONS  = 20
     MAX_POSITION_PCT    = 0.15
-    MIN_LIQUIDITY       = 500
+    MIN_LIQUIDITY       = 2000
+    MIN_PRICE           = 0.10
+    MAX_PRICE           = 0.90
     DAILY_LOSS_LIMIT    = -0.10
-    MAX_DRAWDOWN        = -0.20
+    MAX_DRAWDOWN        = -0.50
 
-    MIN_GAP             = 0.07
+    MIN_GAP             = 0.05
     MIN_HOURS           = 1
     MAX_HOURS           = 168
-    MIN_VOLUME          = 1_000
+    MIN_VOLUME          = 2_000
 
-    CLAUDE_MODEL        = "claude-opus-4-5"
-    MIN_CONFIDENCE      = 63
+    CLAUDE_MODEL        = "claude-haiku-4-5-20251001"
+    MIN_CONFIDENCE      = 60
     CONSENSUS_THRESHOLD = 2
 
-    TARGET_CAPTURE      = 0.85
+    TARGET_CAPTURE      = 0.60
     VOLUME_SPIKE_MULT   = 3.0
-    STALE_HOURS         = 24
-    STALE_THRESHOLD     = 0.02
+    STALE_HOURS         = 12
+    STALE_THRESHOLD     = 0.05
 
     API_HOST            = "0.0.0.0"
     API_PORT            = 5000

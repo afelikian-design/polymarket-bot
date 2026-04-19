@@ -218,6 +218,10 @@ def run_scanner():
                 price = round((best_bid + best_ask) / 2, 4)
                 if price <= 0 or price >= 1:
                     continue
+                if price < Config.MIN_PRICE or price > Config.MAX_PRICE:
+                    continue
+                if price < Config.MIN_PRICE or price > Config.MAX_PRICE:
+                    continue
                 scored.append({
                     "condition_id": condition_id,
                     "question": m.get("question", ""),
