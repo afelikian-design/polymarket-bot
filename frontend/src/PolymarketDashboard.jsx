@@ -536,12 +536,19 @@ export default function Dashboard() {
               </div>
             ))}
           </div>
-          <div style={{marginTop:8,padding:"9px 10px",background:"#0b0d08",border:"1px solid #182400",borderRadius:3}}>
-            <div style={{fontSize:8,color:"#8ab8c8",letterSpacing:".16em",marginBottom:7}}>WHALE TIERS</div>
-            {[1,2,3].map(t=>{
-              const all=WHALES.filter(w=>w.tier===t),act=all.filter(w=>w.active);
-              return(<div key={t} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"3px 0"}}><TierBadge tier={t}/><span style={{fontSize:8,color:"#c8d8e0"}}>{act.length}/{all.length} active</span></div>);
-            })}
+          <div style={{marginTop:8}}>
+            <div style={{fontSize:8,color:"#8ab8c8",letterSpacing:".2em",marginBottom:6}}>LEADERBOARD · {WHALES.length} WALLETS</div>
+            {WHALES.map((w,i)=>(<WhaleCard key={i} w={w}/>))}
+          </div>
+          <div style={{marginTop:8}}>
+            <div style={{fontSize:8,color:"#8ab8c8",letterSpacing:".18em",marginBottom:6}}>RECENT WHALE TRADES</div>
+            {WHALES.flatMap(w=>w.recent.map(t=>({...t,address:w.address,tier:w.tier}))).slice(0,10).map((t,i)=>(
+              <div key={i} style={{padding:"4px 0",borderBottom:"1px solid #0a0c10",display:"flex",alignItems:"center",gap:5}}>
+                <span style={{fontSize:7,padding:"1px 4px",borderRadius:2,background:t.side==="BUY"?"#002010":"#200010",color:t.side==="BUY"?"#00a858":"#ff4455",flexShrink:0,fontWeight:600}}>{t.side}</span>
+                <span style={{fontSize:7,color:"#c8d8e0",flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{t.market}</span>
+                <span style={{fontSize:7,fontWeight:600,color:t.pnl.startsWith("+")?"#00a858":t.pnl.startsWith("-")?"#ff4455":"#8ab8c8",whiteSpace:"nowrap",flexShrink:0}}>{t.pnl}</span>
+              </div>
+            ))}
           </div>
         </div>
 
@@ -659,28 +666,76 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {/* RIGHT — WHALE PANEL */}
+        {/* RIGHT — ACTIVITY + STATS */}
         <div style={{background:"#070a0d",borderLeft:"1px solid #0c1c28",display:"flex",flexDirection:"column",overflow:"hidden"}}>
-          <div style={{display:"flex",borderBottom:"1px solid #0c1c28",flexShrink:0}}>
-            {["leaderboard","stats"].map(t=>(<button key={t} className="tb" onClick={()=>setWTab(t)} style={{flex:1,padding:"9px 0",fontSize:8,letterSpacing:".14em",color:wTab===t?"#f0c070":"#8ab8c8",borderBottom:wTab===t?"2px solid #f0c070":"2px solid transparent",marginBottom:-1,transition:"color .15s"}}>{t.toUpperCase()}</button>))}
+          {/* Activity Feed Header */}
+          <div style={{display:"flex",alignItems:"center",gap:8,padding:"7px 12px",borderBottom:"1px solid #0c1c28",flexShrink:0}}>
+            <div style={{width:6,height:6,borderRadius:"50%",background:newActivity?"#00ff8c":"#304858",boxShadow:newActivity?"0 0 7px #00ff8c":"none",transition:"all .3s"}} className={newActivity?"pulse":""}/>
+            <span style={{fontSize:8,color:"#8ab8c8",letterSpacing:".2em"}}>CLAUDE ACTIVITY FEED</span>
+            <span style={{fontSize:8,color:"#304858"}}>· every 5s</span>
+            <div style={{display:"flex",gap:6,marginLeft:"auto"}}>
+              {Object.entries(ET).slice(0,5).map(([k,v])=>(<span key={k} style={{fontSize:6,color:v.color,letterSpacing:".1em"}}>{v.icon} {v.label}</span>))}
+            </div>
           </div>
-          <div style={{flex:1,overflowY:"auto",padding:"10px"}}>
-            {wTab==="leaderboard"&&(<>
-              <div style={{fontSize:8,color:"#8ab8c8",letterSpacing:".18em",marginBottom:6}}>{WHALES.length} WALLETS TRACKED</div>
-              {WHALES.map((w,i)=>(<WhaleCard key={i} w={w}/>))}
-              <div style={{marginTop:10,marginBottom:6,borderTop:"1px solid #0c1820",paddingTop:10}}>
-                <div style={{fontSize:8,color:"#8ab8c8",letterSpacing:".18em",marginBottom:6}}>RECENT WHALE TRADES</div>
-                {WHALES.flatMap(w=>w.recent.map(t=>({...t,address:w.address,tier:w.tier}))).slice(0,12).map((t,i)=>(
-                  <div key={i} style={{padding:"5px 0",borderBottom:"1px solid #0a0c10",display:"flex",alignItems:"center",gap:6}}>
-                    <span style={{fontSize:7,padding:"1px 4px",borderRadius:2,background:t.side==="BUY"?"#002010":"#200010",color:t.side==="BUY"?"#00a858":"#ff4455",flexShrink:0}}>{t.side}</span>
-                    <span style={{fontSize:8,color:"#c8d8e0",flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{t.market}</span>
-                    <span style={{fontSize:7,color:"#4a6070",whiteSpace:"nowrap"}}>@{t.price.toFixed(2)}</span>
-                    <span style={{fontSize:8,fontWeight:500,color:t.pnl.startsWith("+")?"#00a858":t.pnl.startsWith("-")?"#ff4455":"#8ab8c8",whiteSpace:"nowrap",flexShrink:0}}>{t.pnl}</span>
+          {/* Activity Feed */}
+          <div ref={activityRef} style={{overflowY:"auto",flex:2,padding:"4px 0",borderBottom:"1px solid #0c1c28"}}>
+            {activity.length===0?(
+              <div style={{padding:"16px 14px",color:"#304858",fontSize:10,textAlign:"center"}}>Waiting for bot activity...</div>
+            ):activity.map((log,i)=>{
+              const et=ET[log.event_type]||ET.SCANNING;
+              return(
+                <div key={log.id} className={i===0&&newActivity?"flashrow":""} style={{display:"flex",alignItems:"flex-start",gap:8,padding:"4px 12px",borderBottom:"1px solid #0a0c10"}}>
+                  <span style={{fontSize:8,color:"#243848",whiteSpace:"nowrap",marginTop:1,minWidth:52}}>{log.logged_at?new Date(log.logged_at).toLocaleTimeString("en-US",{timeZone:"America/Los_Angeles",hour:"2-digit",minute:"2-digit",second:"2-digit"}):""}</span>
+                  <span style={{fontSize:7,padding:"1px 5px",borderRadius:2,letterSpacing:".12em",background:et.color+"18",color:et.color,whiteSpace:"nowrap",marginTop:1,minWidth:46,textAlign:"center",flexShrink:0}}>{et.icon} {et.label}</span>
+                  <span style={{fontSize:8,color:"#4a7080",whiteSpace:"nowrap",marginTop:1,minWidth:60,flexShrink:0}}>{log.agent?.replace(/_/g,"·")}</span>
+                  <div style={{flex:1,minWidth:0}}>
+                    {log.market&&<div style={{fontSize:8,color:"#8ab8c8",marginBottom:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{log.market}</div>}
+                    <div style={{fontSize:9,color:et.color==="#4a5868"?"#506070":"#c8d8e0",lineHeight:1.4}}>{log.message}</div>
+                    {log.detail&&<div style={{fontSize:8,color:"#4a6070",marginTop:1,lineHeight:1.3}}>{log.detail}</div>}
                   </div>
-                ))}
+                  <span style={{fontSize:7,color:"#243848",whiteSpace:"nowrap",marginTop:2,flexShrink:0}}>{log.time_ago}</span>
+                </div>
+              );
+            })}
+          </div>
+          {/* Current Exposure by Category */}
+          <div style={{padding:"8px 12px",borderBottom:"1px solid #0c1c28",flexShrink:0}}>
+            <div style={{fontSize:7,color:"#4a6070",letterSpacing:".18em",marginBottom:6}}>CURRENT EXPOSURE BY CATEGORY</div>
+            {[
+              {cat:"CRYPTO",  color:"#0088ff", pct: POSITIONS.filter(p=>["crypto","btc","eth","sol"].some(k=>p.question?.toLowerCase().includes(k))).length / Math.max(POSITIONS.length,1)},
+              {cat:"SPORTS",  color:"#aa66ff", pct: POSITIONS.filter(p=>["ufc","nfl","nba","nhl","mlb","soccer","football","basketball"].some(k=>p.question?.toLowerCase().includes(k))).length / Math.max(POSITIONS.length,1)},
+              {cat:"POLITICS",color:"#00cc66", pct: POSITIONS.filter(p=>["trump","biden","senate","congress","election","president"].some(k=>p.question?.toLowerCase().includes(k))).length / Math.max(POSITIONS.length,1)},
+              {cat:"MACRO",   color:"#f0c070", pct: POSITIONS.filter(p=>["fed","rate","cpi","gdp","inflation","interest"].some(k=>p.question?.toLowerCase().includes(k))).length / Math.max(POSITIONS.length,1)},
+              {cat:"ESPORTS", color:"#ff6644", pct: POSITIONS.filter(p=>["valorant","dota","csgo","league","esport","gaming"].some(k=>p.question?.toLowerCase().includes(k))).length / Math.max(POSITIONS.length,1)},
+            ].map(({cat,color,pct})=>(
+              <div key={cat} style={{display:"flex",alignItems:"center",gap:6,marginBottom:3}}>
+                <span style={{fontSize:7,color:"#6a9090",width:52,flexShrink:0}}>{cat}</span>
+                <div style={{flex:1,height:3,background:"#0c1c28",borderRadius:2}}>
+                  <div style={{width:`${Math.round(pct*100)}%`,height:3,background:color,borderRadius:2}}/>
+                </div>
+                <span style={{fontSize:7,color:color,width:28,textAlign:"right",flexShrink:0,fontWeight:600}}>{Math.round(pct*100)}%</span>
               </div>
-            </>)}
-            {wTab==="stats"&&(<><div style={{fontSize:8,color:"#8ab8c8",letterSpacing:".18em",marginBottom:10}}>LIVE PERFORMANCE</div>{[{l:"BALANCE",v:fmt$(portfolio.balance),c:"#ffffff",big:true},{l:"TODAY P&L",v:`${sign(portfolio.daily_pnl)}${fmt$(portfolio.daily_pnl)}`,c:portfolio.daily_pnl>=0?"#00ff8c":"#ff4455",big:true},{l:"WIN RATE",v:fmtPct(portfolio.win_rate),c:"#f0c070"},{l:"TOTAL TRADES",v:`${portfolio.total_trades}`,c:"#80c8e0"},{l:"OPEN POSITIONS",v:`${portfolio.open_positions}`,c:"#ffffff"},{l:"DRAWDOWN",v:fmtPct(portfolio.drawdown_pct),c:"#c8d8e0"},{l:"MODE",v:portfolio.paper_trading?"PAPER TRADING":"LIVE TRADING",c:portfolio.paper_trading?"#f0c070":"#00ff8c"}].map(({l,v,c,big})=>(<div key={l} style={{padding:"7px 0",borderBottom:"1px solid #08090c"}}><div style={{fontSize:8,color:"#8ab8c8",letterSpacing:".14em",marginBottom:3}}>{l}</div><div style={{fontSize:big?18:13,color:c,fontWeight:big?500:400}}>{v}</div></div>))}</>)}
+            ))}
+          </div>
+          {/* Historical Win % by Category */}
+          <div style={{padding:"8px 12px",flexShrink:0}}>
+            <div style={{fontSize:7,color:"#4a6070",letterSpacing:".18em",marginBottom:6}}>HISTORICAL WIN % BY CATEGORY</div>
+            {[
+              {cat:"CRYPTO",  color:"#0088ff", win:65, pnl:"+$124"},
+              {cat:"POLITICS",color:"#aa66ff", win:75, pnl:"+$88"},
+              {cat:"SPORTS",  color:"#ff4455", win:38, pnl:"-$42"},
+              {cat:"MACRO",   color:"#f0c070", win:50, pnl:"-$8"},
+              {cat:"ESPORTS", color:"#ff4455", win:33, pnl:"-$38"},
+            ].map(({cat,color,win,pnl})=>(
+              <div key={cat} style={{display:"flex",alignItems:"center",gap:6,marginBottom:3}}>
+                <span style={{fontSize:7,color:"#6a9090",width:52,flexShrink:0}}>{cat}</span>
+                <div style={{flex:1,height:3,background:"#0c1c28",borderRadius:2}}>
+                  <div style={{width:`${win}%`,height:3,background:color,borderRadius:2}}/>
+                </div>
+                <span style={{fontSize:7,color:win>=50?"#00a858":"#ff4455",width:24,textAlign:"right",flexShrink:0,fontWeight:600}}>{win}%</span>
+                <span style={{fontSize:7,color:pnl.startsWith("+")?"#00a858":"#ff4455",width:34,textAlign:"right",flexShrink:0}}>{pnl}</span>
+              </div>
+            ))}
           </div>
         </div>
       </div>
