@@ -67,6 +67,7 @@ def get_trades():
         "pnl":         p.pnl,
         "exit_reason": p.exit_reason,
         "closed_at":   p.closed_at.isoformat() if p.closed_at else None,
+        "opened_at":   p.opened_at.isoformat() if p.opened_at else None,
     } for p in positions])
 
 @app.route("/api/agents")

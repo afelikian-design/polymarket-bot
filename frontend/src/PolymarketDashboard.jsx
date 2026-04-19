@@ -430,13 +430,19 @@ export default function Dashboard() {
                 <div className="mob-card" style={{textAlign:"center",color:"#8ab8c8",fontSize:12,padding:"32px 14px"}}>No closed trades yet</div>
               ):TRADES.map((t,i)=>(
                 <div key={i} className="mob-card">
-                  <div style={{fontSize:12,color:"#ffffff",marginBottom:8,lineHeight:1.4}}>{t.question}</div>
-                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
-                    <div style={{display:"flex",gap:12}}>
+                  <div style={{fontSize:12,color:"#ffffff",marginBottom:6,lineHeight:1.4}}>{t.question}</div>
+                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:5}}>
+                    <div style={{display:"flex",gap:10}}>
                       <span style={{fontSize:11,color:"#8ab8c8"}}>In: <span style={{color:"#fff"}}>{t.entry_price?.toFixed(3)}</span></span>
                       <span style={{fontSize:11,color:"#8ab8c8"}}>Out: <span style={{color:"#fff"}}>{t.exit_price?.toFixed(3)}</span></span>
                     </div>
                     <span style={{fontSize:15,fontWeight:500,color:(t.pnl||0)>=0?"#00a858":"#ff4455"}}>{sign(t.pnl||0)}{fmt$(t.pnl||0)}</span>
+                  </div>
+                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:5}}>
+                    <div style={{display:"flex",gap:8}}>
+                      {t.opened_at&&<span style={{fontSize:9,color:"#4a6070"}}>Opened: <span style={{color:"#8ab8c8"}}>{new Date(t.opened_at).toLocaleString("en-US",{timeZone:"America/Los_Angeles",month:"numeric",day:"numeric",hour:"2-digit",minute:"2-digit"})}</span></span>}
+                      {t.closed_at&&<span style={{fontSize:9,color:"#4a6070"}}>Closed: <span style={{color:"#8ab8c8"}}>{new Date(t.closed_at).toLocaleString("en-US",{timeZone:"America/Los_Angeles",month:"numeric",day:"numeric",hour:"2-digit",minute:"2-digit"})}</span></span>}
+                    </div>
                   </div>
                   <span style={{fontSize:10,padding:"2px 8px",borderRadius:4,background:t.exit_reason==="TARGET_HIT"?"#002010":t.exit_reason==="STOP_LOSS"?"#240010":"#141400",color:t.exit_reason==="TARGET_HIT"?"#00a858":t.exit_reason==="STOP_LOSS"?"#ff4455":"#a09020"}}>
                     {t.exit_reason}
