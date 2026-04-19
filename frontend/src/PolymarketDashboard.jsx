@@ -554,285 +554,40 @@ export default function Dashboard() {
 
         {/* CENTER */}
         <div style={{display:"flex",flexDirection:"column",overflow:"hidden"}}>
-          {/* Chart */}
-              <div className="mob-card">
-                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
-                  <span style={{fontSize:10,color:"#8ab8c8",letterSpacing:".14em"}}>PORTFOLIO</span>
-                  <span style={{fontSize:12,color:pd>=0?"#00ff8c":"#ff4455",fontWeight:500}}>{sign(pd)}{fmt$(pd)}</span>
-                </div>
-                {/* Timeframe toggles */}
-                <div style={{display:"flex",gap:4,marginBottom:10,background:"#07090c",borderRadius:6,padding:3}}>
-                  {TIMEFRAMES.map((t,i)=>(
-                    <button key={t.label} className="tf-btn" onClick={()=>switchTf(i)} style={{flex:1,color:tfIdx===i?"#00ff8c":"#4a6070",background:tfIdx===i?"#0a1e14":"none",border:tfIdx===i?"1px solid #00ff8c22":"1px solid transparent",fontWeight:tfIdx===i?500:400}}>
-                      {t.label}
-                    </button>
-                  ))}
-                </div>
-                <ResponsiveContainer width="100%" height={120}>
-                  <LineChart data={pnlData} margin={{top:2,right:2,bottom:0,left:0}}>
-                    <defs>
-                      <linearGradient id="lg" x1="0" y1="0" x2="1" y2="0">
-                        <stop offset="0%" stopColor="#006840"/><stop offset="100%" stopColor="#00ff8c"/>
-                      </linearGradient>
-                    </defs>
-                    <XAxis dataKey="time" tick={{fill:"#8ab8c8",fontSize:8}} axisLine={false} tickLine={false} interval={Math.floor(pnlData.length/4)}/>
-                    <YAxis tick={{fill:"#8ab8c8",fontSize:8}} axisLine={false} tickLine={false} width={40} tickFormatter={v=>`$${v.toFixed(0)}`} domain={["auto","auto"]}/>
-                    <Tooltip contentStyle={{background:"#0b0e14",border:"1px solid #0c1c28",borderRadius:6,fontSize:11}} formatter={v=>[fmt$(v),"Balance"]}/>
-                    <ReferenceLine y={p0} stroke="#8ab8c8" strokeDasharray="3 3"/>
-                    <Line type="monotone" dataKey="balance" stroke="url(#lg)" strokeWidth={2} dot={false} activeDot={{r:4,fill:"#00ff8c"}}/>
-                  </LineChart>
-                </ResponsiveContainer>
+          {/* Activity feed */}
+          <div style={{background:"#080b0f",borderBottom:"1px solid #0c1c28",flexShrink:0,maxHeight:180,display:"flex",flexDirection:"column"}}>
+            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"7px 14px",borderBottom:"1px solid #0c1c28",flexShrink:0}}>
+              <div style={{display:"flex",alignItems:"center",gap:8}}>
+                <div style={{width:6,height:6,borderRadius:"50%",background:newActivity?"#00ff8c":"#304858",boxShadow:newActivity?"0 0 7px #00ff8c":"none",transition:"all .3s"}} className={newActivity?"pulse":""}/>
+                <span style={{fontSize:8,color:"#8ab8c8",letterSpacing:".2em"}}>CLAUDE ACTIVITY FEED</span>
+                <span style={{fontSize:8,color:"#304858"}}>· refreshes every 5s</span>
               </div>
-
-              {/* Agent status */}
-              <div className="mob-card">
-                <button className="mob-btn" onClick={()=>setExpandedAgent(!expandedAgent)} style={{width:"100%",display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:expandedAgent?10:0}}>
-                  <span style={{fontSize:10,color:"#8ab8c8",letterSpacing:".14em"}}>AGENTS</span>
-                  <span style={{fontSize:10,color:"#304858"}}>{expandedAgent?"▲":"▼"}</span>
-                </button>
-                {expandedAgent && Object.entries(agentData).map(([name,a])=>(
-                  <div key={name} style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",padding:"8px 0",borderBottom:"1px solid #0c1820"}}>
-                    <div>
-                      <div style={{fontSize:10,color:"#ffffff",marginBottom:2}}>{name.replace(/_/g," ").toUpperCase()}</div>
-                      <div style={{fontSize:10,color:"#8ab8c8",lineHeight:1.4,maxWidth:220}}>{a.message}</div>
-                    </div>
-                    <div style={{display:"flex",alignItems:"center",gap:5,flexShrink:0}}>
-                      <div style={{width:6,height:6,borderRadius:"50%",background:a.status==="running"?"#00ff8c":a.status==="error"?"#ff4455":"#8ab8c8",boxShadow:a.status==="running"?"0 0 5px #00ff8c":"none"}} className={a.status==="running"?"pulse":""}/>
-                      <span style={{fontSize:9,color:a.status==="running"?"#00cc70":a.status==="error"?"#ff4455":"#c8d8e0"}}>{a.status?.toUpperCase()}</span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-
-              {/* Risk engine */}
-              <div className="mob-card">
-                <div style={{fontSize:10,color:"#8ab8c8",letterSpacing:".14em",marginBottom:8}}>RISK ENGINE</div>
-                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
-                  {[["Kelly Cap","10%"],["Daily Loss","−10%"],["Max Draw","−20%"],["Open Pos",`${portfolio.open_positions}/10`]].map(([l,v])=>(
-                    <div key={l} style={{display:"flex",justifyContent:"space-between",padding:"6px 10px",background:"#07090c",borderRadius:6}}>
-                      <span style={{fontSize:10,color:"#8ab8c8"}}>{l}</span>
-                      <span style={{fontSize:10,color:"#00ff8c",fontWeight:500}}>{v}</span>
-                    </div>
-                  ))}
-                </div>
+              <div style={{display:"flex",gap:8}}>
+                {Object.entries(ET).slice(0,5).map(([k,v])=>(<span key={k} style={{fontSize:7,color:v.color,letterSpacing:".1em"}}>{v.icon} {v.label}</span>))}
               </div>
             </div>
-          )}
-
-          {/* POSITIONS TAB */}
-          {mobileTab==="positions" && (
-            <div>
-              <div style={{fontSize:10,color:"#8ab8c8",letterSpacing:".14em",marginBottom:12}}>OPEN POSITIONS · {POSITIONS.length}</div>
-              {POSITIONS.length===0?(
-                <div className="mob-card" style={{textAlign:"center",color:"#8ab8c8",fontSize:12,padding:"32px 14px"}}>
-                  No open positions — bot is scanning markets
-                </div>
-              ):POSITIONS.map((p,i)=>(
-                <div key={i} className="mob-card">
-                  <div style={{fontSize:12,color:"#ffffff",marginBottom:6,lineHeight:1.4}}>{p.question}</div>
-                  <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8,marginBottom:8}}>
-                    {[["ENTRY",p.entry_price?.toFixed(3),"#c8d8e0"],["NOW",p.current_price?.toFixed(3),p.current_price>p.entry_price?"#00a858":"#ff4455"],["EST.",fmtPct(p.our_probability||0),"#f0c070"]].map(([l,v,c])=>(
-                      <div key={l}>
-                        <div style={{fontSize:9,color:"#8ab8c8",marginBottom:2}}>{l}</div>
-                        <div style={{fontSize:14,color:c,fontWeight:500}}>{v}</div>
-                      </div>
-                    ))}
-                  </div>
-                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-                    <span style={{fontSize:11,color:"#8ab8c8"}}>Size: <span style={{color:"#fff"}}>{fmt$(p.size_usd||0)}</span></span>
-                    <span style={{fontSize:13,fontWeight:500,color:(p.unrealized_pnl||0)>=0?"#00a858":"#ff4455"}}>{sign(p.unrealized_pnl||0)}{fmt$(p.unrealized_pnl||0)}</span>
-                  </div>
-                  {p.thesis && <div style={{fontSize:10,color:"#8ab8c8",marginTop:6,fontStyle:"italic",lineHeight:1.4}}>"{p.thesis?.slice(0,80)}"</div>}
-                </div>
-              ))}
-
-              {/* Queue */}
-              {QUEUE.length>0 && (
-                <>
-                  <div style={{fontSize:10,color:"#8ab8c8",letterSpacing:".14em",margin:"16px 0 10px"}}>PENDING THESES · {QUEUE.length}</div>
-                  {QUEUE.map((q,i)=>(
-                    <div key={i} className="mob-card" style={{borderLeft:"3px solid #007848"}}>
-                      <div style={{fontSize:12,color:"#ffffff",marginBottom:6,lineHeight:1.4}}>{q.question}</div>
-                      <div style={{display:"flex",gap:12,marginBottom:6}}>
-                        <span style={{fontSize:10,color:"#8ab8c8"}}>Mkt: <span style={{color:"#fff"}}>{q.price?.toFixed(2)}</span></span>
-                        <span style={{fontSize:10,color:"#8ab8c8"}}>Edge: <span style={{color:"#f0c070"}}>+{fmtPct(q.edge||0)}</span></span>
-                        <span style={{fontSize:10,color:"#8ab8c8"}}>Conf: <span style={{color:"#00a858"}}>{q.confidence}</span></span>
-                      </div>
-                      <div style={{fontSize:10,color:"#8ab8c8",fontStyle:"italic"}}>"{q.thesis}"</div>
-                    </div>
-                  ))}
-                </>
-              )}
-            </div>
-          )}
-
-          {/* TRADES TAB */}
-          {mobileTab==="trades" && (
-            <div>
-              <div style={{fontSize:10,color:"#8ab8c8",letterSpacing:".14em",marginBottom:12}}>CLOSED TRADES · {TRADES.length}</div>
-              {TRADES.length===0?(
-                <div className="mob-card" style={{textAlign:"center",color:"#8ab8c8",fontSize:12,padding:"32px 14px"}}>No closed trades yet</div>
-              ):TRADES.map((t,i)=>(
-                <div key={i} className="mob-card">
-                  <div style={{fontSize:12,color:"#ffffff",marginBottom:8,lineHeight:1.4}}>{t.question}</div>
-                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
-                    <div style={{display:"flex",gap:12}}>
-                      <span style={{fontSize:11,color:"#8ab8c8"}}>In: <span style={{color:"#fff"}}>{t.entry_price?.toFixed(3)}</span></span>
-                      <span style={{fontSize:11,color:"#8ab8c8"}}>Out: <span style={{color:"#fff"}}>{t.exit_price?.toFixed(3)}</span></span>
-                    </div>
-                    <span style={{fontSize:15,fontWeight:500,color:(t.pnl||0)>=0?"#00a858":"#ff4455"}}>{sign(t.pnl||0)}{fmt$(t.pnl||0)}</span>
-                  </div>
-                  <span style={{fontSize:10,padding:"2px 8px",borderRadius:4,background:t.exit_reason==="TARGET_HIT"?"#002010":t.exit_reason==="STOP_LOSS"?"#240010":"#141400",color:t.exit_reason==="TARGET_HIT"?"#00a858":t.exit_reason==="STOP_LOSS"?"#ff4455":"#a09020"}}>
-                    {t.exit_reason}
-                  </span>
-                </div>
-              ))}
-            </div>
-          )}
-
-          {/* ACTIVITY TAB */}
-          {mobileTab==="activity" && (
-            <div>
-              <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:12}}>
-                <div style={{width:7,height:7,borderRadius:"50%",background:newActivity?"#00ff8c":"#304858",boxShadow:newActivity?"0 0 7px #00ff8c":"none"}} className={newActivity?"pulse":""}/>
-                <span style={{fontSize:10,color:"#8ab8c8",letterSpacing:".14em"}}>CLAUDE ACTIVITY · live</span>
-              </div>
+            <div ref={activityRef} style={{overflowY:"auto",flex:1,padding:"4px 0"}}>
               {activity.length===0?(
-                <div className="mob-card" style={{textAlign:"center",color:"#8ab8c8",fontSize:12,padding:"32px 14px"}}>Waiting for activity...</div>
+                <div style={{padding:"16px 14px",color:"#304858",fontSize:10,textAlign:"center"}}>Waiting for bot activity...</div>
               ):activity.map((log,i)=>{
                 const et=ET[log.event_type]||ET.SCANNING;
                 return(
-                  <div key={log.id} className={`mob-card ${i===0&&newActivity?"flashrow":""}`} style={{padding:"10px 12px",marginBottom:8}}>
-                    <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:log.market?4:0}}>
-                      <span style={{fontSize:9,padding:"2px 6px",borderRadius:3,background:et.color+"18",color:et.color,flexShrink:0}}>{et.icon} {et.label}</span>
-                      <span style={{fontSize:9,color:"#4a7080",flexShrink:0}}>{log.agent?.replace(/_/g,"·")}</span>
-                      <div style={{flex:1}}/>
-                      <span style={{fontSize:9,color:"#243848"}}>{log.time_ago}</span>
+                  <div key={log.id} className={i===0&&newActivity?"flashrow":""} style={{display:"flex",alignItems:"flex-start",gap:8,padding:"4px 14px",borderBottom:"1px solid #0a0c10"}}>
+                    <span style={{fontSize:8,color:"#243848",whiteSpace:"nowrap",marginTop:1,minWidth:52}}>{log.logged_at?new Date(log.logged_at).toLocaleTimeString([],{hour:"2-digit",minute:"2-digit",second:"2-digit"}):""}</span>
+                    <span style={{fontSize:7,padding:"1px 5px",borderRadius:2,letterSpacing:".12em",background:et.color+"18",color:et.color,whiteSpace:"nowrap",marginTop:1,minWidth:46,textAlign:"center",flexShrink:0}}>{et.icon} {et.label}</span>
+                    <span style={{fontSize:8,color:"#4a7080",whiteSpace:"nowrap",marginTop:1,minWidth:60,flexShrink:0}}>{log.agent?.replace(/_/g,"·")}</span>
+                    <div style={{flex:1,minWidth:0}}>
+                      {log.market&&<div style={{fontSize:8,color:"#8ab8c8",marginBottom:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{log.market}</div>}
+                      <div style={{fontSize:9,color:et.color==="#4a5868"?"#506070":"#c8d8e0",lineHeight:1.4}}>{log.message}</div>
+                      {log.detail&&<div style={{fontSize:8,color:"#4a6070",marginTop:1,lineHeight:1.3}}>{log.detail}</div>}
                     </div>
-                    {log.market&&<div style={{fontSize:10,color:"#8ab8c8",marginBottom:3,lineHeight:1.4}}>{log.market}</div>}
-                    <div style={{fontSize:11,color:et.color==="#4a5868"?"#506070":"#c8d8e0",lineHeight:1.5}}>{log.message}</div>
-                    {log.detail&&<div style={{fontSize:10,color:"#4a6070",marginTop:3,lineHeight:1.4}}>{log.detail}</div>}
+                    <span style={{fontSize:7,color:"#243848",whiteSpace:"nowrap",marginTop:2,flexShrink:0}}>{log.time_ago}</span>
                   </div>
                 );
               })}
             </div>
-          )}
-
-          {/* WHALES TAB */}
-          {mobileTab==="whales" && (
-            <div>
-              <div style={{fontSize:10,color:"#8ab8c8",letterSpacing:".14em",marginBottom:12}}>
-                {WHALES.length} TRACKED WALLETS · TAP TO SEE TRADES
-              </div>
-              {WHALES.map((w,i)=>(
-                <WhaleCard key={i} w={w} expanded={expandedWhale===i} onToggle={()=>setExpandedWhale(expandedWhale===i?null:i)}/>
-              ))}
-            </div>
-          )}
-        </div>
-
-        {/* MOBILE BOTTOM NAV */}
-        <div style={{position:"fixed",bottom:0,left:0,right:0,background:"#070a0d",borderTop:"1px solid #0c1c28",display:"flex",paddingBottom:"env(safe-area-inset-bottom)",zIndex:100}}>
-          {NAV_ITEMS.map(({key,icon,label})=>(
-            <button key={key} className="nav-btn" onClick={()=>setMobileTab(key)} style={{color:mobileTab===key?"#00ff8c":"#4a6070"}}>
-              <span style={{fontSize:18}}>{icon}</span>
-              <span style={{fontSize:8,letterSpacing:".08em",fontWeight:mobileTab===key?500:400}}>{label}</span>
-              {mobileTab===key&&<div style={{width:20,height:2,background:"#00ff8c",borderRadius:1,marginTop:1}}/>}
-            </button>
-          ))}
-        </div>
-      </div>
-    );
-  // ── DESKTOP LAYOUT ────────────────────────────────────────
-  return (
-    <div style={{background:"#07090c",minHeight:"100vh",fontFamily:"'DM Mono',monospace",color:"#ffffff",overflow:"hidden"}}>
-      <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&display=swap');
-        *{box-sizing:border-box;margin:0;padding:0}
-        ::-webkit-scrollbar{width:3px}::-webkit-scrollbar-track{background:#08090c}::-webkit-scrollbar-thumb{background:#18283a}
-        .pulse{animation:pulse 2s ease-in-out infinite}@keyframes pulse{0%,100%{opacity:1}50%{opacity:.25}}
-        .blink{animation:blink 1.2s step-end infinite}@keyframes blink{0%,100%{opacity:1}50%{opacity:0}}
-        .flashrow{animation:fl .8s ease}@keyframes fl{0%{background:rgba(0,255,140,.08)}100%{background:transparent}}
-        .rh:hover{background:rgba(0,200,120,.025)!important}
-        .tb{background:none;border:none;cursor:pointer;font-family:inherit}
-        .tf-btn{background:none;border:none;cursor:pointer;font-family:inherit;padding:3px 9px;font-size:9px;letter-spacing:.12em;border-radius:3px;transition:all .15s}
-        .tf-btn:hover{background:#0c1c28}
-        .timer-bar{transition:width .9s linear}
-      `}</style>
-
-      {/* TOP BAR */}
-      <div style={{background:"#070a0d",borderBottom:"1px solid #0c1c28",padding:"9px 22px",display:"flex",alignItems:"center",justifyContent:"space-between",position:"sticky",top:0,zIndex:100}}>
-        <div style={{display:"flex",alignItems:"center",gap:14}}>
-          <div style={{display:"flex",alignItems:"center",gap:7}}>
-            <div style={{width:7,height:7,borderRadius:"50%",background:apiError?"#ff4455":"#00ff8c",boxShadow:apiError?"0 0 9px #ff4455":"0 0 9px #00ff8c"}} className="pulse"/>
-            <span style={{fontWeight:500,fontSize:13,color:apiError?"#ff4455":"#00ff8c",letterSpacing:".14em"}}>POLYBOT</span>
           </div>
-          <div style={{width:1,height:14,background:"#0c1c28"}}/>
-          <span style={{fontSize:9,color:portfolio.paper_trading?"#f0c070":"#00ff8c",letterSpacing:".1em"}}>{portfolio.paper_trading?"PAPER MODE":"LIVE"}</span>
-          <div style={{width:1,height:14,background:"#0c1c28"}}/>
-          <span style={{fontSize:9,color:"#c8d8e0"}}>{new Date().toUTCString().slice(5,22)} <span className="blink">_</span></span>
-          {apiError&&<span style={{fontSize:9,color:"#ff4455",letterSpacing:".1em"}}>⚠ API OFFLINE</span>}
-        </div>
-        <div style={{display:"flex",gap:28}}>
-          {[
-            {l:"BALANCE",  v:fmt$(portfolio.balance),c:"#ffffff"},
-            {l:"TODAY",    v:`${sign(portfolio.daily_pnl)}${fmt$(portfolio.daily_pnl)}`,c:portfolio.daily_pnl>=0?"#00ff8c":"#ff4455"},
-            {l:"WIN RATE", v:fmtPct(portfolio.win_rate),c:"#f0c070"},
-            {l:"TRADES",   v:`${portfolio.total_trades}`,c:"#80c8e0"},
-            {l:"DRAWDOWN", v:fmtPct(portfolio.drawdown_pct),c:"#c8d8e0"},
-            {l:"🐋 WHALES",v:`${WHALES.length} tracked`,c:"#f0c070"},
-          ].map(({l,v,c})=>(
-            <div key={l} style={{textAlign:"right"}}>
-              <div style={{fontSize:8,color:"#8ab8c8",letterSpacing:".16em",marginBottom:2}}>{l}</div>
-              <div style={{fontSize:12,color:c,fontWeight:500}}>{v}</div>
-            </div>
-          ))}
-        </div>
-      </div>
 
-      <div style={{display:"grid",gridTemplateColumns:"196px 1fr 280px",height:"calc(100vh - 46px)"}}>
-        {/* LEFT PANEL */}
-        <div style={{background:"#070a0d",borderRight:"1px solid #0c1c28",padding:"14px 11px",overflowY:"auto",display:"flex",flexDirection:"column",gap:7}}>
-          <div style={{fontSize:8,color:"#8ab8c8",letterSpacing:".2em",marginBottom:4}}>AGENTS</div>
-          {Object.entries(agentData).map(([name,a])=>(
-            <div key={name} style={{padding:"8px 10px",background:"#0a0d12",border:`1px solid ${a.status==="running"?"#0a2418":"#0c1820"}`,borderRadius:3}}>
-              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:4}}>
-                <span style={{fontSize:9,color:"#ffffff",letterSpacing:".06em"}}>{name.replace(/_/g," ").toUpperCase()}</span>
-                <div style={{display:"flex",alignItems:"center",gap:4}}>
-                  <div style={{width:5,height:5,borderRadius:"50%",background:a.status==="running"?"#00ff8c":a.status==="error"?"#ff4455":"#8ab8c8",boxShadow:a.status==="running"?"0 0 5px #00ff8c":"none"}} className={a.status==="running"?"pulse":""}/>
-                  <span style={{fontSize:8,color:a.status==="running"?"#00cc70":a.status==="error"?"#ff4455":"#c8d8e0",letterSpacing:".1em"}}>{a.status?.toUpperCase()}</span>
-                </div>
-              </div>
-              <div style={{fontSize:9,color:"#c8d8e0",lineHeight:1.5}}>{a.message}</div>
-            </div>
-          ))}
-          <div style={{marginTop:8}}>
-            <div style={{fontSize:8,color:"#8ab8c8",letterSpacing:".2em",marginBottom:8}}>RISK ENGINE</div>
-            {[["Kelly Cap","10%"],["Daily Loss","−10%"],["Max Draw","−20%"],["Open Pos",`${portfolio.open_positions}/10`]].map(([l,v])=>(
-              <div key={l} style={{display:"flex",justifyContent:"space-between",padding:"3px 0",borderBottom:"1px solid #09090d"}}>
-                <span style={{fontSize:9,color:"#c8d8e0"}}>{l}</span>
-                <span style={{fontSize:9,color:"#00ff8c"}}>{v}</span>
-              </div>
-            ))}
-          </div>
-          <div style={{marginTop:8}}>
-            <div style={{fontSize:8,color:"#8ab8c8",letterSpacing:".2em",marginBottom:6}}>LEADERBOARD · {WHALES.length} WALLETS</div>
-            {WHALES.map((w,i)=>(<WhaleCard key={i} w={w}/>))}
-          </div>
-          <div style={{marginTop:8}}>
-            <div style={{fontSize:8,color:"#8ab8c8",letterSpacing:".18em",marginBottom:6}}>RECENT WHALE TRADES</div>
-            {WHALES.flatMap(w=>w.recent.map(t=>({...t,address:w.address,tier:w.tier}))).slice(0,10).map((t,i)=>(
-              <div key={i} style={{padding:"4px 0",borderBottom:"1px solid #0a0c10",display:"flex",alignItems:"center",gap:5}}>
-                <span style={{fontSize:7,padding:"1px 4px",borderRadius:2,background:t.side==="BUY"?"#002010":"#200010",color:t.side==="BUY"?"#00a858":"#ff4455",flexShrink:0,fontWeight:600}}>{t.side}</span>
-                <span style={{fontSize:7,color:"#c8d8e0",flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{t.market}</span>
-                <span style={{fontSize:7,fontWeight:600,color:t.pnl.startsWith("+")?"#00a858":t.pnl.startsWith("-")?"#ff4455":"#8ab8c8",whiteSpace:"nowrap",flexShrink:0}}>{t.pnl}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* CENTER */}
-        <div style={{display:"flex",flexDirection:"column",overflow:"hidden"}}>
           {/* Chart */}
           <div style={{background:"#090c10",borderBottom:"1px solid #0c1c28",padding:"13px 18px",flexShrink:0}}>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
@@ -851,7 +606,7 @@ export default function Dashboard() {
                 <span style={{fontSize:11,color:"#c8d8e0"}}>{sign(pd)}{((pd/p0)*100).toFixed(2)}%</span>
               </div>
             </div>
-            <ResponsiveContainer width="100%" height={160}>
+            <ResponsiveContainer width="100%" height={80}>
               <LineChart data={pnlData} margin={{top:2,right:2,bottom:0,left:0}}>
                 <defs><linearGradient id="lg2" x1="0" y1="0" x2="1" y2="0"><stop offset="0%" stopColor="#006840"/><stop offset="100%" stopColor="#00ff8c"/></linearGradient></defs>
                 <XAxis dataKey="time" tick={{fill:"#8ab8c8",fontSize:8}} axisLine={false} tickLine={false} interval={Math.floor(pnlData.length/5)}/>
