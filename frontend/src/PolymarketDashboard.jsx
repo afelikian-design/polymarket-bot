@@ -518,7 +518,7 @@ export default function Dashboard() {
                   <span style={{fontSize:7,color:"#8ab8c8",letterSpacing:".06em",fontWeight:700}}>{name.replace(/_/g," ").toUpperCase()}</span>
                   <span style={{fontSize:6,color:a.status==="running"?"#00cc70":a.status==="error"?"#ff4455":"#304858",letterSpacing:".08em"}}>{a.status?.toUpperCase()}</span>
                 </div>
-                <div style={{fontSize:7,color:"#c8d8e0",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",marginTop:1,lineHeight:1.3}}>{a.message}</div>
+                <div style={{fontSize:7,color:"#c8d8e0",whiteSpace:"normal",marginTop:1,lineHeight:1.3,wordBreak:"break-word"}}>{a.message}</div>
               </div>
             </div>
           ))}
