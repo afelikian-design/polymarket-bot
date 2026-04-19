@@ -113,3 +113,15 @@ def init_db(db_path: str):
     Base.metadata.create_all(engine)
     Session = sessionmaker(bind=engine)
     return Session()
+
+class StrategyInsight(Base):
+    __tablename__ = "strategy_insights"
+    id            = Column(Integer, primary_key=True)
+    analyzed_at   = Column(DateTime, default=datetime.utcnow)
+    total_trades  = Column(Integer, default=0)
+    win_rate      = Column(Float, default=0)
+    summary       = Column(Text)
+    recommendations = Column(Text)  # JSON list of recommendation strings
+    warnings      = Column(Text)    # JSON list of warning strings
+    raw_analysis  = Column(Text)
+

@@ -587,6 +587,96 @@ def run_exit_monitor():
         logger.error(msg)
 
 
+
+def run_strategy_analyzer():
+    log_agent("strategy_analyzer", "running", "Analyzing trading performance...")
+    try:
+        from database import Position, StrategyInsight
+        import json, anthropic
+        session = SessionFactory()
+
+        # Get last 50 closed trades
+        trades = session.query(Position).filter_by(status="CLOSED").order_by(Position.closed_at.desc()).limit(50).all()
+        if len(trades) < 5:
+            log_agent("strategy_analyzer", "idle", "Not enough trades to analyze yet")
+            session.close()
+            return
+
+        # Build trade summary for Claude
+        trade_lines = []
+        for t in trades:
+            pnl = t.pnl or 0
+            win = "WIN" if pnl > 0 else ("LOSS" if pnl < 0 else "NEUTRAL")
+            held = round((t.closed_at - t.opened_at).total_seconds() / 3600, 1) if t.closed_at and t.opened_at else 0
+            trade_lines.append(f"{win} | PnL: ${pnl:.2f} | Entry: {t.entry_price} | Exit: {t.exit_price} | Reason: {t.exit_reason} | Held: {held}h | Market: {t.question[:60]}")
+
+        trade_text = "\n".join(trade_lines)
+        wins = sum(1 for t in trades if (t.pnl or 0) > 0)
+        win_rate = round(wins / len(trades) * 100, 1)
+        total_pnl = sum(t.pnl or 0 for t in trades)
+
+        prompt = f"""You are analyzing a Polymarket prediction market trading bot's recent performance.
+
+Here are the last {len(trades)} closed trades:
+{trade_text}
+
+Overall: {wins}/{len(trades)} wins ({win_rate}% win rate), Total PnL: ${total_pnl:.2f}
+
+Analyze this data and respond with ONLY a JSON object in this exact format:
+{{
+  "summary": "2-3 sentence summary of overall performance",
+  "warnings": ["warning 1", "warning 2", "warning 3"],
+  "recommendations": ["specific config change 1", "specific config change 2", "specific config change 3", "specific config change 4"]
+}}
+
+Focus on:
+- Which market categories are winning vs losing
+- Whether entry prices are too low (< 0.10 is risky)
+- Whether stop losses are triggering too often
+- Whether stale thesis is closing too many positions
+- Time patterns if visible
+- Specific actionable config changes with exact values
+
+Be specific and data-driven. No markdown, just the JSON object."""
+
+        client = anthropic.Anthropic(api_key=Config.ANTHROPIC_API_KEY)
+        response = client.messages.create(
+            model=Config.CLAUDE_MODEL,
+            max_tokens=1000,
+            messages=[{"role": "user", "content": prompt}]
+        )
+
+        raw = response.content[0].text.strip()
+        # Clean JSON
+        if raw.startswith("```"):
+            raw = raw.split("```")[1]
+            if raw.startswith("json"):
+                raw = raw[4:]
+        raw = raw.strip()
+
+        data = json.loads(raw)
+
+        insight = StrategyInsight(
+            total_trades=len(trades),
+            win_rate=win_rate / 100,
+            summary=data.get("summary", ""),
+            recommendations=json.dumps(data.get("recommendations", [])),
+            warnings=json.dumps(data.get("warnings", [])),
+            raw_analysis=raw
+        )
+        session.add(insight)
+        session.commit()
+        session.close()
+
+        log_agent("strategy_analyzer", "idle", f"Analysis complete: {len(data.get('recommendations',[]))} recommendations generated")
+        log_activity("strategy_analyzer", "SCANNING",
+            f"Strategy analysis complete — {win_rate}% win rate on {len(trades)} trades",
+            detail=data.get("summary", "")[:100])
+
+    except Exception as e:
+        log_agent("strategy_analyzer", "error", f"Analysis error: {e}")
+        logger.error(f"Strategy analyzer error: {e}")
+
 def run_whale_monitor():
     log_agent("whale_monitor", "idle", "Monitoring markets for whale activity")
     log_activity("whale_monitor", "SCANNING", "Polling 50 tracked wallets for new entries")
@@ -630,6 +720,7 @@ def main():
     schedule.every(Config.EXIT_CHECK_SEC).seconds.do(run_exit_monitor)
     schedule.every(5).minutes.do(portfolio.snapshot)
     schedule.every(60).minutes.do(run_whale_monitor)
+    schedule.every(30).minutes.do(run_strategy_analyzer)
 
     logger.info("All agents scheduled. Bot running 24/7.")
 

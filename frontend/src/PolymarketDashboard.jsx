@@ -161,6 +161,7 @@ export default function Dashboard() {
     whale_monitor:{status:"idle",message:"Starting..."},
   });
   const [activity, setActivity]   = useState([]);
+  const [insights, setInsights]   = useState(null);
   const [prevActivityId, setPrevActivityId] = useState(null);
   const [newActivity, setNewActivity] = useState(false);
 
@@ -173,13 +174,14 @@ export default function Dashboard() {
   useEffect(()=>{
     const fetchData = async () => {
       try {
-        const [port,pos,trd,agt,queue,snaps] = await Promise.all([
+        const [port,pos,trd,agt,queue,snaps,insights] = await Promise.all([
           fetch(`${API_BASE}/api/portfolio`).then(r=>r.json()),
           fetch(`${API_BASE}/api/positions`).then(r=>r.json()),
           fetch(`${API_BASE}/api/trades`).then(r=>r.json()),
           fetch(`${API_BASE}/api/agents`).then(r=>r.json()),
           fetch(`${API_BASE}/api/queue`).then(r=>r.json()),
           fetch(`${API_BASE}/api/snapshots`).then(r=>r.json()),
+          fetch(`${API_BASE}/api/insights`).then(r=>r.json()).catch(()=>null),
         ]);
         setPortfolio(port); setPositions(pos); setTrades(trd); setAgentData(agt); setQueue(queue);
         if(snaps && snaps.length > 0){
@@ -189,6 +191,7 @@ export default function Dashboard() {
           }));
           setPnlData(chartData);
         }
+        if(insights) setInsights(insights);
         setApiError(false);
       } catch(e){ setApiError(true); }
     };
@@ -698,6 +701,29 @@ export default function Dashboard() {
                 <span style={{fontSize:7,color:pnl.startsWith("+")?"#00a858":"#ff4455",width:34,textAlign:"right",flexShrink:0}}>{pnl}</span>
               </div>
             ))}
+          </div>
+          {/* Strategy Intelligence */}
+          <div style={{padding:"8px 12px",borderTop:"1px solid #0c1c28",flexShrink:0}}>
+            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:5}}>
+              <div style={{fontSize:7,color:"#4a6070",letterSpacing:".18em"}}>STRATEGY INTELLIGENCE</div>
+              {insights?.analyzed_at&&<span style={{fontSize:6,color:"#243848"}}>{new Date(insights.analyzed_at).toLocaleTimeString("en-US",{timeZone:"America/Los_Angeles",hour:"2-digit",minute:"2-digit"})}</span>}
+            </div>
+            {!insights&&<div style={{fontSize:7,color:"#243848",textAlign:"center",padding:"8px 0"}}>Awaiting first analysis...</div>}
+            {insights&&(<>
+              <div style={{fontSize:7,color:"#8ab8c8",lineHeight:1.4,marginBottom:5}}>{insights.summary}</div>
+              {(insights.warnings||[]).map((w,i)=>(
+                <div key={i} style={{display:"flex",alignItems:"flex-start",gap:4,marginBottom:3}}>
+                  <span style={{color:"#ff4455",fontSize:7,flexShrink:0}}>⚠</span>
+                  <span style={{fontSize:7,color:"#ff6070",lineHeight:1.3}}>{w}</span>
+                </div>
+              ))}
+              {(insights.recommendations||[]).map((r,i)=>(
+                <div key={i} style={{display:"flex",alignItems:"flex-start",gap:4,marginBottom:3}}>
+                  <span style={{color:"#00a858",fontSize:7,flexShrink:0}}>⚡</span>
+                  <span style={{fontSize:7,color:"#00c86e",lineHeight:1.3}}>{r}</span>
+                </div>
+              ))}
+            </>)}
           </div>
         </div>
       </div>

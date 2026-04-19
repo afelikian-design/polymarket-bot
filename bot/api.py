@@ -181,3 +181,31 @@ def _time_ago(dt):
     if secs < 3600:
         return "{}m ago".format(secs // 60)
     return "{}h ago".format(secs // 3600)
+
+@app.route("/api/snapshots")
+def get_snapshots():
+    from database import WalletSnapshot
+    snaps = db.query(WalletSnapshot).order_by(WalletSnapshot.snapshotted_at.asc()).all()
+    return jsonify([{
+        "balance": s.balance,
+        "open_pnl": s.open_pnl or 0,
+        "daily_pnl": s.daily_pnl or 0,
+        "time": s.snapshotted_at.isoformat() if s.snapshotted_at else None
+    } for s in snaps])
+
+@app.route("/api/insights")
+def get_insights():
+    from database import StrategyInsight
+    import json
+    insight = db.query(StrategyInsight).order_by(StrategyInsight.analyzed_at.desc()).first()
+    if not insight:
+        return jsonify({"summary":"No analysis yet","recommendations":[],"warnings":[],"win_rate":0,"total_trades":0,"analyzed_at":None})
+    return jsonify({
+        "summary": insight.summary,
+        "recommendations": json.loads(insight.recommendations or "[]"),
+        "warnings": json.loads(insight.warnings or "[]"),
+        "win_rate": insight.win_rate,
+        "total_trades": insight.total_trades,
+        "analyzed_at": insight.analyzed_at.isoformat() if insight.analyzed_at else None
+    })
+
