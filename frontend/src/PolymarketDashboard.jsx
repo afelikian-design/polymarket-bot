@@ -160,7 +160,7 @@ export default function Dashboard() {
   useEffect(()=>{
     const fetchData = async () => {
       try {
-        const [port,pos,trd,agt,queue,snaps,insights] = await Promise.all([
+        const [port,pos,trd,agt,queue,snaps,insights,catStats] = await Promise.all([
           fetch(`${API_BASE}/api/portfolio`).then(r=>r.json()),
           fetch(`${API_BASE}/api/positions`).then(r=>r.json()),
           fetch(`${API_BASE}/api/trades`).then(r=>r.json()),
