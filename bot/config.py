@@ -28,9 +28,9 @@ class Config:
 
     MIN_GAP             = 0.07
     MIN_HOURS           = 1
-    MAX_HOURS           = 168
-    MIN_VOLUME          = 1000
-    MAX_VOLUME          = 150000
+    MAX_HOURS           = 720
+    MIN_VOLUME          = 500
+    MAX_VOLUME          = 400000
 
     CLAUDE_MODEL        = "claude-sonnet-4-6"
     MIN_CONFIDENCE      = 70

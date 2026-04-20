@@ -278,7 +278,7 @@ def run_brain():
         theses = []
         skipped = 0
 
-        for i, market in enumerate(queue[:20]):
+        for i, market in enumerate(queue[:50]):
             q = market["question"]
             price = market["price"]
             hours = market["hours"]
