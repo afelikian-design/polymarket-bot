@@ -76,9 +76,9 @@ const WHALES = [
     ]},
 ];
 
-const fmt$   = n => `$${Math.abs(n).toLocaleString("en-US",{minimumFractionDigits:2,maximumFractionDigits:2})}`;
+const fmt$   = n => `${n<0?"-":""}$${Math.abs(n).toLocaleString("en-US",{minimumFractionDigits:2,maximumFractionDigits:2})}`;
 const fmtK   = n => n>=1000?`$${(n/1000).toFixed(1)}K`:fmt$(n);
-const fmtPct = n => `${(n*100).toFixed(1)}%`;
+const fmtPct = n => `${n<0?"-":""}${Math.abs(n*100).toFixed(1)}%`;
 const sign   = n => n>=0?"+":"";
 
 const TC = {1:"#f0c070",2:"#80c8e0",3:"#607888"};
