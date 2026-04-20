@@ -712,7 +712,7 @@ export default function Dashboard() {
         </div>
 
         {/* RIGHT — ACTIVITY + STATS */}
-        <div style={{background:"#070a0d",borderLeft:"1px solid #0c1c28",display:"flex",flexDirection:"column",overflow:"hidden",height:"100%"}}>
+        <div style={{background:"#070a0d",borderLeft:"1px solid #0c1c28",display:"flex",flexDirection:"column",overflow:"hidden"}}>
           {/* Activity Feed Header */}
           <div style={{display:"flex",alignItems:"center",gap:8,padding:"7px 12px",borderBottom:"1px solid #0c1c28",flexShrink:0}}>
             <div style={{width:6,height:6,borderRadius:"50%",background:newActivity?"#00ff8c":"#304858",boxShadow:newActivity?"0 0 7px #00ff8c":"none",transition:"all .3s"}} className={newActivity?"pulse":""}/>
@@ -743,7 +743,7 @@ export default function Dashboard() {
             })}
           </div>
           {/* Current Exposure by Category */}
-          <div style={{overflowY:"auto",flexShrink:0,maxHeight:"45%",borderTop:"1px solid #0c1c28"}}>
+          <div style={{padding:"8px 12px",borderBottom:"1px solid #0c1c28",flexShrink:0}}>
             <div style={{fontSize:7,color:"#4a6070",letterSpacing:".18em",marginBottom:6}}>CURRENT EXPOSURE BY CATEGORY</div>
             {[
               {cat:"CRYPTO",  color:"#0088ff", pct: POSITIONS.filter(p=>["crypto","btc","eth","sol","bitcoin","ethereum","solana","binance","usdc","token","xrp","bnb","up or down"].some(k=>p.question?.toLowerCase().includes(k))).length / Math.max(POSITIONS.length,1)},
