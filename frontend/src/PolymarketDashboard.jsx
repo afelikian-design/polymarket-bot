@@ -11,18 +11,8 @@ const TIMEFRAMES = [
   { label: "ALL", points: 240, interval: 60 },
 ];
 
-const generatePnL = (points, intervalMin) => {
-  const data = []; let bal = 1000;
-  const now = Date.now();
-  for (let i = points; i >= 0; i--) {
-    bal = Math.max(820, bal + (Math.random() - 0.36) * 38);
-    const ts = new Date(now - i * intervalMin * 60 * 1000);
-    const label = intervalMin < 60
-      ? ts.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
-      : ts.toLocaleDateString([], { month: "short", day: "numeric" });
-    data.push({ time: label, balance: +bal.toFixed(2) });
-  }
-  return data;
+const generatePnL = () => {
+  return [{ time: "now", balance: 1000 }];
 };
 
 const WHALES = [
