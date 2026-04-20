@@ -11,7 +11,7 @@ class Config:
     CHAIN_ID            = 137
 
     PAPER_TRADING       = os.getenv("PAPER_TRADING", "true").lower() == "true"
-    SCAN_INTERVAL_SEC   = 300
+    SCAN_INTERVAL_SEC   = 900
     BRAIN_INTERVAL_SEC  = 60
     EXIT_CHECK_SEC      = 5
     MAX_MARKETS_SCAN    = 500

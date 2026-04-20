@@ -278,7 +278,7 @@ def run_brain():
         theses = []
         skipped = 0
 
-        for i, market in enumerate(queue[:50]):
+        for i, market in enumerate(queue[:25]):
             q = market["question"]
             price = market["price"]
             hours = market["hours"]
@@ -304,18 +304,35 @@ def run_brain():
                 prompt += '"base_rate_note": "what recent news or data supports your estimate", "thesis": "one sentence including what you found", "action": "BUY"}'
                 prompt += "\n\nSet action to SKIP if edge < 0.07 or confidence < 70. Be conservative — only BUY when you found real evidence."
 
-                response = claude.messages.create(
-                    model=Config.CLAUDE_MODEL,
-                    max_tokens=1500,
-                    tools=[{"type": "web_search_20250305", "name": "web_search"}],
-                    messages=[{"role": "user", "content": prompt}]
-                )
-
-                # Extract text from response — may include web search tool use blocks
+                # Agentic tool loop for web_search
+                messages = [{"role": "user", "content": prompt}]
                 text = ""
-                for block in response.content:
-                    if hasattr(block, "type") and block.type == "text":
-                        text += block.text
+                for _ in range(5):
+                    response = claude.messages.create(
+                        model=Config.CLAUDE_MODEL,
+                        max_tokens=1500,
+                        tools=[{"type": "web_search_20250305", "name": "web_search"}],
+                        messages=messages
+                    )
+                    for block in response.content:
+                        if hasattr(block, "type") and block.type == "text":
+                            text += block.text
+                    if response.stop_reason == "end_turn":
+                        break
+                    if response.stop_reason == "tool_use":
+                        messages.append({"role": "assistant", "content": response.content})
+                        tool_results = []
+                        for block in response.content:
+                            if hasattr(block, "type") and block.type == "tool_use":
+                                tool_results.append({
+                                    "type": "tool_result",
+                                    "tool_use_id": block.id,
+                                    "content": "Search completed."
+                                })
+                        if tool_results:
+                            messages.append({"role": "user", "content": tool_results})
+                    else:
+                        break
                 text = text.strip().replace("```json", "").replace("```", "").strip()
                 # Find JSON in response
                 start = text.find("{")
