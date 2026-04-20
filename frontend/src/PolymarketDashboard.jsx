@@ -467,8 +467,8 @@ export default function Dashboard() {
                   </div>
                   <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:5}}>
                     <div style={{display:"flex",gap:8}}>
-                      {t.opened_at&&<span style={{fontSize:9,color:"#4a6070"}}>Opened: <span style={{color:"#8ab8c8"}}>{new Date(t.opened_at).toLocaleString("en-US",{timeZone:"America/Los_Angeles",month:"numeric",day:"numeric",hour:"2-digit",minute:"2-digit"})}</span></span>}
-                      {t.closed_at&&<span style={{fontSize:9,color:"#4a6070"}}>Closed: <span style={{color:"#8ab8c8"}}>{new Date(t.closed_at).toLocaleString("en-US",{timeZone:"America/Los_Angeles",month:"numeric",day:"numeric",hour:"2-digit",minute:"2-digit"})}</span></span>}
+                      {t.opened_at&&<span style={{fontSize:9,color:"#4a6070"}}>Opened: <span style={{color:"#8ab8c8"}}>{new Date(t.opened_at.endsWith("Z")?t.opened_at:t.opened_at+"Z").toLocaleString("en-US",{timeZone:"America/Los_Angeles",month:"numeric",day:"numeric",hour:"2-digit",minute:"2-digit"})}</span></span>}
+                      {t.closed_at&&<span style={{fontSize:9,color:"#4a6070"}}>Closed: <span style={{color:"#8ab8c8"}}>{new Date(t.closed_at.endsWith("Z")?t.closed_at:t.closed_at+"Z").toLocaleString("en-US",{timeZone:"America/Los_Angeles",month:"numeric",day:"numeric",hour:"2-digit",minute:"2-digit"})}</span></span>}
                     </div>
                   </div>
                   <span style={{fontSize:10,padding:"2px 8px",borderRadius:4,background:t.exit_reason==="TARGET_HIT"?"#002010":t.exit_reason==="STOP_LOSS"?"#240010":"#141400",color:t.exit_reason==="TARGET_HIT"?"#00a858":t.exit_reason==="STOP_LOSS"?"#ff4455":"#a09020"}}>
@@ -696,7 +696,7 @@ export default function Dashboard() {
               <table style={{width:"100%",borderCollapse:"collapse",fontSize:10}}>
                 <thead style={{background:"#070a0d",position:"sticky",top:0}}><tr>{["MARKET","ENTRY","EXIT","P&L","REASON"].map(h=>(<th key={h} style={{padding:"7px 10px",textAlign:"left",color:"#8ab8c8",fontSize:8,letterSpacing:".12em",fontWeight:400,borderBottom:"1px solid #0c1c28"}}>{h}</th>))}</tr></thead>
                 <tbody>{TRADES.map((t,i)=>{
-  const fmtDt = dt => dt ? new Date(dt).toLocaleString("en-US",{timeZone:"America/Los_Angeles",month:"numeric",day:"numeric",hour:"2-digit",minute:"2-digit"}) : "—";
+  const fmtDt = dt => dt ? new Date(dt.endsWith('Z')?dt:dt+'Z').toLocaleString("en-US",{timeZone:"America/Los_Angeles",month:"numeric",day:"numeric",hour:"2-digit",minute:"2-digit"}) : "—";
   return(<tr key={i} className="rh" style={{borderBottom:"1px solid #07080b"}}>
     <td style={{padding:"8px 10px",color:"#fff",maxWidth:200}}><div style={{overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{t.question}</div></td>
     <td style={{padding:"8px 10px",color:"#c8d8e0",whiteSpace:"nowrap"}}><div>{t.entry_price?.toFixed(3)}</div><div style={{fontSize:8,color:"#4a6070",marginTop:2}}>{fmtDt(t.opened_at)}</div></td>
