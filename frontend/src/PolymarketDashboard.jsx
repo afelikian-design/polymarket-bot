@@ -127,6 +127,8 @@ export default function Dashboard() {
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
   const [tfIdx, setTfIdx]       = useState(2);
   const [pnlData, setPnlData]   = useState(() => generatePnL(96, 15));
+  const [allSnaps, setAllSnaps] = useState([]);
+  const tfIdxRef = useRef(2);
   const [mobileTab, setMobileTab] = useState("overview");
   const [desktopTab, setDesktopTab] = useState("positions");
   const [wTab, setWTab]         = useState("leaderboard");
@@ -172,7 +174,13 @@ export default function Dashboard() {
         ]);
         setPortfolio(port); setPositions(pos); setTrades(trd); setAgentData(agt); setQueue(queue);
         if(snaps && snaps.length > 0){
-          const chartData = snaps.map(s=>({
+          setAllSnaps(snaps);
+          const tf = TIMEFRAMES[tfIdxRef.current];
+          const now = Date.now();
+          const cutoff = tf.label === "ALL" ? 0 : now - tf.points * tf.interval * 60 * 1000;
+          const filtered = snaps.filter(s => tf.label === "ALL" || new Date(s.time).getTime() >= cutoff);
+          const src = filtered.length > 0 ? filtered : snaps;
+          const chartData = src.map(s=>({
             time: new Date(s.time).toLocaleTimeString("en-US",{timeZone:"America/Los_Angeles",hour:"2-digit",minute:"2-digit"}),
             balance: s.balance + (s.open_pnl||0)
           }));
@@ -208,25 +216,23 @@ export default function Dashboard() {
 
   const switchTf = (i) => {
     setTfIdx(i);
+    tfIdxRef.current = i;
     const tf = TIMEFRAMES[i];
     const now = Date.now();
     const cutoff = tf.label === "ALL" ? 0 : now - tf.points * tf.interval * 60 * 1000;
-    fetch(`${API_BASE}/api/snapshots`)
-      .then(r => r.json())
-      .then(snaps => {
-        const filtered = snaps.filter(s => tf.label === "ALL" || new Date(s.time).getTime() >= cutoff);
-        if (filtered.length > 0) {
-          const chartData = filtered.map(s => ({
-            time: new Date(s.time).toLocaleTimeString("en-US", {
-              timeZone: "America/Los_Angeles",
-              hour: "2-digit", minute: "2-digit",
-            }),
-            balance: s.balance + (s.open_pnl || 0)
-          }));
-          setPnlData(chartData);
-        }
-      })
-      .catch(() => {});
+    const snaps = allSnaps.length > 0 ? allSnaps : [];
+    const filtered = snaps.filter(s => tf.label === "ALL" || new Date(s.time).getTime() >= cutoff);
+    const src = filtered.length > 0 ? filtered : snaps;
+    if (src.length > 0) {
+      const chartData = src.map(s => ({
+        time: new Date(s.time).toLocaleTimeString("en-US", {
+          timeZone: "America/Los_Angeles",
+          hour: "2-digit", minute: "2-digit",
+        }),
+        balance: s.balance + (s.open_pnl || 0)
+      }));
+      setPnlData(chartData);
+    }
   };
   const p0=pnlData[0]?.balance??1000, pN=pnlData[pnlData.length-1]?.balance??1000, pd=pN-p0;
 
