@@ -743,7 +743,7 @@ export default function Dashboard() {
             })}
           </div>
           {/* Current Exposure by Category */}
-          <div style={{padding:"8px 12px",borderBottom:"1px solid #0c1c28",flexShrink:0}}>
+          <div style={{padding:"8px 12px",borderBottom:"1px solid #0c1c28",flexShrink:0,overflowY:"auto",maxHeight:"220px"}}>
             <div style={{fontSize:7,color:"#4a6070",letterSpacing:".18em",marginBottom:6}}>CURRENT EXPOSURE BY CATEGORY</div>
             {[
               {cat:"CRYPTO",  color:"#0088ff", pct: POSITIONS.filter(p=>["crypto","btc","eth","sol","bitcoin","ethereum","solana","binance","usdc","token","xrp","bnb","up or down"].some(k=>p.question?.toLowerCase().includes(k))).length / Math.max(POSITIONS.length,1)},
