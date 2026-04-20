@@ -66,22 +66,28 @@ class Portfolio:
 
     def get_start_of_day_balance(self):
         from database import Position
-        today_start = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+        import pytz
+        pacific = pytz.timezone("America/Los_Angeles")
+        now_pac = datetime.now(pacific)
+        midnight_pac = now_pac.replace(hour=0, minute=0, second=0, microsecond=0)
+        today_start = midnight_pac.astimezone(pytz.utc).replace(tzinfo=None)
         closed_before_today = self.db.query(Position).filter(
             Position.status == "CLOSED",
             Position.closed_at < today_start
         ).all()
         return round(self._initial + sum(p.pnl or 0 for p in closed_before_today), 2)
-
     def get_daily_pnl(self):
         from database import Position
-        today_start = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+        import pytz
+        pacific = pytz.timezone("America/Los_Angeles")
+        now_pac = datetime.now(pacific)
+        midnight_pac = now_pac.replace(hour=0, minute=0, second=0, microsecond=0)
+        today_start = midnight_pac.astimezone(pytz.utc).replace(tzinfo=None)
         today_closed = self.db.query(Position).filter(
             Position.status == "CLOSED",
             Position.closed_at >= today_start
         ).all()
         return round(sum(p.pnl or 0 for p in today_closed), 2)
-
     def get_open_count(self):
         from database import Position
         return self.db.query(Position).filter_by(status="OPEN").count()
