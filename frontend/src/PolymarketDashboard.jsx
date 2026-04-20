@@ -581,7 +581,7 @@ export default function Dashboard() {
         </div>
       </div>
 
-      <div style={{display:"grid",gridTemplateColumns:"196px 1fr 280px",height:"calc(100vh - 46px)"}}>
+      <div style={{display:"grid",gridTemplateColumns:"196px 1fr 320px",height:"calc(100vh - 46px)"}}>
         {/* LEFT PANEL */}
         <div style={{background:"#070a0d",borderRight:"1px solid #0c1c28",padding:"14px 11px",overflowY:"auto",display:"flex",flexDirection:"column",gap:7}}>
           <div style={{fontSize:8,color:"#8ab8c8",letterSpacing:".2em",marginBottom:4}}>AGENTS</div>
