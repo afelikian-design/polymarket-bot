@@ -200,17 +200,22 @@ export default function Dashboard() {
     const fetchActivity = async () => {
       try {
         const data = await fetch(`${API_BASE}/api/activity`).then(r=>r.json());
-        if(data.length>0&&data[0].id!==prevActivityId){
-          setNewActivity(true); setPrevActivityId(data[0].id);
-          setTimeout(()=>setNewActivity(false),1200);
+        if(data.length>0){
+          setActivity(prev => {
+            if(prev.length===0||data[0].id!==prev[0].id){
+              setNewActivity(true);
+              setPrevActivityId(data[0].id);
+              setTimeout(()=>setNewActivity(false),1200);
+            }
+            return data;
+          });
         }
-        setActivity(data);
       } catch(e){}
     };
     fetchActivity();
     const interval = setInterval(fetchActivity,5000);
     return()=>clearInterval(interval);
-  },[prevActivityId]);
+  },[]);
 
   useEffect(()=>{const t=setInterval(()=>setElapsed(e=>e+1),1000);return()=>clearInterval(t);},[]);
 
