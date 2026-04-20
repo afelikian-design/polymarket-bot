@@ -12,9 +12,9 @@ class Config:
 
     PAPER_TRADING       = os.getenv("PAPER_TRADING", "true").lower() == "true"
     SCAN_INTERVAL_SEC   = 900
-    BRAIN_INTERVAL_SEC  = 60
-    EXIT_CHECK_SEC      = 5
-    MAX_MARKETS_SCAN    = 500
+    BRAIN_INTERVAL_SEC  = 600
+    EXIT_CHECK_SEC      = 60
+    MAX_MARKETS_SCAN    = 100
 
     MAX_KELLY_FRACTION  = 0.10
     MIN_KELLY_FRACTION  = 0.01
@@ -33,7 +33,7 @@ class Config:
     MAX_VOLUME          = 400000
 
     CLAUDE_MODEL        = "claude-sonnet-4-6"
-    MIN_CONFIDENCE      = 70
+    MIN_CONFIDENCE      = 75
     CONSENSUS_THRESHOLD = 2
 
     TARGET_CAPTURE      = 0.60
