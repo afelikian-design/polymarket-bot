@@ -147,6 +147,7 @@ export default function Dashboard() {
   });
   const [activity, setActivity]   = useState([]);
   const [insights, setInsights]   = useState(null);
+  const [categoryStats, setCategoryStats] = useState([]);
   const [prevActivityId, setPrevActivityId] = useState(null);
   const [newActivity, setNewActivity] = useState(false);
 
@@ -167,6 +168,7 @@ export default function Dashboard() {
           fetch(`${API_BASE}/api/queue`).then(r=>r.json()),
           fetch(`${API_BASE}/api/snapshots`).then(r=>r.json()),
           fetch(`${API_BASE}/api/insights`).then(r=>r.json()).catch(()=>null),
+          fetch(`${API_BASE}/api/category_stats`).then(r=>r.json()).catch(()=>[]),
         ]);
         setPortfolio(port); setPositions(pos); setTrades(trd); setAgentData(agt); setQueue(queue);
         if(snaps && snaps.length > 0){
@@ -177,6 +179,7 @@ export default function Dashboard() {
           setPnlData(chartData);
         }
         if(insights) setInsights(insights);
+        if(catStats && catStats.length > 0) setCategoryStats(catStats);
         setApiError(false);
       } catch(e){ setApiError(true); }
     };
@@ -750,22 +753,24 @@ export default function Dashboard() {
           {/* Historical Win % by Category */}
           <div style={{padding:"8px 12px",flexShrink:0}}>
             <div style={{fontSize:7,color:"#4a6070",letterSpacing:".18em",marginBottom:6}}>HISTORICAL WIN % BY CATEGORY</div>
-            {[
-              {cat:"CRYPTO",  color:"#0088ff", win:65, pnl:"+$124"},
-              {cat:"POLITICS",color:"#aa66ff", win:75, pnl:"+$88"},
-              {cat:"SPORTS",  color:"#ff4455", win:38, pnl:"-$42"},
-              {cat:"MACRO",   color:"#f0c070", win:50, pnl:"-$8"},
-              {cat:"ESPORTS", color:"#ff4455", win:33, pnl:"-$38"},
-            ].map(({cat,color,win,pnl})=>(
-              <div key={cat} style={{display:"flex",alignItems:"center",gap:6,marginBottom:3}}>
-                <span style={{fontSize:7,color:"#6a9090",width:52,flexShrink:0}}>{cat}</span>
-                <div style={{flex:1,height:3,background:"#0c1c28",borderRadius:2}}>
-                  <div style={{width:`${win}%`,height:3,background:color,borderRadius:2}}/>
+            {categoryStats.length === 0 ? (
+              <div style={{fontSize:7,color:"#243848",textAlign:"center",padding:"4px 0"}}>No closed trades yet</div>
+            ) : categoryStats.filter(c=>c.total>0).map(({category,win_rate,pnl})=>{
+              const CAT_COLORS = {CRYPTO:"#0088ff",POLITICS:"#aa66ff",SPORTS:"#ff4455",MACRO:"#f0c070",ESPORTS:"#ff6644"};
+              const color = CAT_COLORS[category] || "#8ab8c8";
+              const win = Math.round(win_rate * 100);
+              const pnlStr = `${pnl>=0?"+":"-"}$${Math.abs(pnl).toFixed(0)}`;
+              return (
+                <div key={category} style={{display:"flex",alignItems:"center",gap:6,marginBottom:3}}>
+                  <span style={{fontSize:7,color:"#6a9090",width:52,flexShrink:0}}>{category}</span>
+                  <div style={{flex:1,height:3,background:"#0c1c28",borderRadius:2}}>
+                    <div style={{width:`${win}%`,height:3,background:color,borderRadius:2}}/>
+                  </div>
+                  <span style={{fontSize:7,color:win>=50?"#00a858":"#ff4455",width:24,textAlign:"right",flexShrink:0,fontWeight:600}}>{win}%</span>
+                  <span style={{fontSize:7,color:pnl>=0?"#00a858":"#ff4455",width:34,textAlign:"right",flexShrink:0}}>{pnlStr}</span>
                 </div>
-                <span style={{fontSize:7,color:win>=50?"#00a858":"#ff4455",width:24,textAlign:"right",flexShrink:0,fontWeight:600}}>{win}%</span>
-                <span style={{fontSize:7,color:pnl.startsWith("+")?"#00a858":"#ff4455",width:34,textAlign:"right",flexShrink:0}}>{pnl}</span>
-              </div>
-            ))}
+              );
+            })}
           </div>
           {/* Strategy Intelligence */}
           <div style={{padding:"8px 12px",borderTop:"1px solid #0c1c28",flexShrink:0}}>

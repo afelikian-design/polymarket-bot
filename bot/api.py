@@ -129,16 +129,39 @@ def get_queue():
     try:
         with open("thesis.json") as f:
             theses = _json.load(f)
-        return jsonify([{
-            "condition_id":    t.get("condition_id"),
-            "question":        t.get("question"),
-            "price":           t.get("market_price"),
-            "our_probability": t.get("our_probability"),
-            "edge":            t.get("edge"),
-            "confidence":      t.get("confidence"),
-            "thesis":          t.get("thesis"),
-            "suggested_size":  t.get("suggested_size", 0),
-        } for t in theses])
+        def _kelly(p_win, mkt_price, bankroll, confidence):
+            if not (0 < mkt_price < 1) or not (0 < p_win < 1):
+                return 0.0
+            b = (1 / mkt_price) - 1
+            q = 1 - p_win
+            f = (p_win * b - q) / b
+            if f <= 0:
+                return 0.0
+            conf_scalar = 0.5 + (min(max(confidence, 50), 100) - 50) / 100.0
+            max_fraction = Config.MAX_KELLY_FRACTION * conf_scalar
+            return round(bankroll * min(f, max_fraction), 2)
+
+        # Get current balance from snapshots
+        snap = db.query(WalletSnapshot).order_by(WalletSnapshot.snapshotted_at.desc()).first()
+        bal = snap.balance if snap else 1000.0
+
+        result = []
+        for t in theses:
+            p_win = t.get("our_probability", 0)
+            mkt = t.get("market_price", 0.5)
+            conf = t.get("confidence", 50)
+            size = _kelly(p_win, mkt, bal, conf)
+            result.append({
+                "condition_id":    t.get("condition_id"),
+                "question":        t.get("question"),
+                "price":           mkt,
+                "our_probability": p_win,
+                "edge":            t.get("edge"),
+                "confidence":      conf,
+                "thesis":          t.get("thesis"),
+                "suggested_size":  size,
+            })
+        return jsonify(result)
     except:
         return jsonify([])
 
@@ -201,6 +224,46 @@ def close_position(condition_id):
     pos.pnl = pnl
     db.commit()
     return jsonify({"status": "closed", "pnl": pnl, "exit_price": current_price})
+
+
+@app.route("/api/category_stats")
+def get_category_stats():
+    closed = db.query(Position).filter_by(status="CLOSED").all()
+    
+    categories = {
+        "CRYPTO":   {"keywords": ["crypto","btc","eth","sol","bitcoin","ethereum","solana","binance","usdc","token","xrp","bnb","up or down","hyperliquid","hype"], "wins":0,"losses":0,"pnl":0},
+        "SPORTS":   {"keywords": ["ufc","nfl","nba","nhl","mlb","soccer","football","basketball","blazers","spurs","lakers","celtics","warriors","knicks","bulls","heat","nets","vs.","fight","match","o/u","over","under","rebounds","points","goals","innings","cardinals","marlins","hawks","bruins","sabres","magic","pistons","trail"], "wins":0,"losses":0,"pnl":0},
+        "POLITICS": {"keywords": ["trump","biden","senate","congress","election","president","democrat","republican","vote","poll","iran","diplomatic","tariff","sanctions","treaty","prime minister","chancellor","minister","starmer","musk"], "wins":0,"losses":0,"pnl":0},
+        "MACRO":    {"keywords": ["fed","rate","cpi","gdp","inflation","interest","recession","treasury","bond","dollar","trade","strait","hormuz","ships","transit","oil","barrel","opec","currency","yuan","euro","yen","gold","silver"], "wins":0,"losses":0,"pnl":0},
+        "ESPORTS":  {"keywords": ["valorant","dota","csgo","lol:","league of legends","esport","gaming","gen.g","nongshim","bo3","bo5","lck","lcs","lec","fnatic","t1","c9","mobile legends","mlbb","mpl"], "wins":0,"losses":0,"pnl":0},
+    }
+    
+    for p in closed:
+        q = (p.question or "").lower()
+        matched = False
+        for cat, data in categories.items():
+            if any(k in q for k in data["keywords"]):
+                if (p.pnl or 0) > 0:
+                    data["wins"] += 1
+                else:
+                    data["losses"] += 1
+                data["pnl"] += (p.pnl or 0)
+                matched = True
+                break
+        if not matched:
+            categories["MACRO"]["losses"] += 1
+
+    result = []
+    for cat, data in categories.items():
+        total = data["wins"] + data["losses"]
+        result.append({
+            "category": cat,
+            "win_rate": round(data["wins"] / total, 3) if total > 0 else 0,
+            "total": total,
+            "wins": data["wins"],
+            "pnl": round(data["pnl"], 2),
+        })
+    return jsonify(result)
 
 if __name__ == "__main__":
     app.run(host=Config.API_HOST, port=Config.API_PORT, debug=False)
