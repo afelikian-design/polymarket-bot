@@ -137,6 +137,7 @@ def get_queue():
             "edge":            t.get("edge"),
             "confidence":      t.get("confidence"),
             "thesis":          t.get("thesis"),
+            "suggested_size":  t.get("suggested_size", 0),
         } for t in theses])
     except:
         return jsonify([])
@@ -171,6 +172,35 @@ def control_halt():
     db.add(log)
     db.commit()
     return jsonify({"status": "halted"})
+
+
+@app.route("/api/close_position/<condition_id>", methods=["POST"])
+def close_position(condition_id):
+    from datetime import datetime
+    pos = db.query(Position).filter_by(id=condition_id, status="OPEN").first()
+    if not pos:
+        return jsonify({"error": "Position not found"}), 404
+    try:
+        r = __import__("requests").get(
+            "https://clob.polymarket.com/markets/{}".format(condition_id),
+            timeout=8
+        )
+        current_price = pos.current_price
+        if r.status_code == 200:
+            tokens = r.json().get("tokens", [])
+            if tokens:
+                current_price = round(float(tokens[0].get("price", pos.current_price)), 4)
+    except:
+        current_price = pos.current_price
+
+    pnl = round((current_price - pos.entry_price) * (pos.size_usd / pos.entry_price), 2) if pos.entry_price > 0 else 0
+    pos.status = "CLOSED"
+    pos.exit_price = current_price
+    pos.exit_reason = "MANUAL_SELL"
+    pos.closed_at = datetime.utcnow()
+    pos.pnl = pnl
+    db.commit()
+    return jsonify({"status": "closed", "pnl": pnl, "exit_price": current_price})
 
 if __name__ == "__main__":
     app.run(host=Config.API_HOST, port=Config.API_PORT, debug=False)

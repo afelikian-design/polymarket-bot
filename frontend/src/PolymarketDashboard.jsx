@@ -435,6 +435,7 @@ export default function Dashboard() {
                         <span style={{fontSize:10,color:"#8ab8c8"}}>Mkt: <span style={{color:"#fff"}}>{q.price?.toFixed(2)}</span></span>
                         <span style={{fontSize:10,color:"#8ab8c8"}}>Edge: <span style={{color:"#f0c070"}}>+{fmtPct(q.edge||0)}</span></span>
                         <span style={{fontSize:10,color:"#8ab8c8"}}>Conf: <span style={{color:"#00a858"}}>{q.confidence}</span></span>
+                        <span style={{fontSize:10,color:"#8ab8c8"}}>Bet: <span style={{color:"#f0c070"}}>{fmt$(q.suggested_size||0)}</span></span>
                       </div>
                       <div style={{fontSize:10,color:"#8ab8c8",fontStyle:"italic"}}>"{q.thesis}"</div>
                     </div>
@@ -702,7 +703,7 @@ export default function Dashboard() {
 })}</tbody>
               </table>
             ))}
-            {desktopTab==="queue"&&(QUEUE.length===0?<div style={{padding:"40px",textAlign:"center",color:"#8ab8c8",fontSize:11}}>No theses yet</div>:<div style={{padding:"12px"}}>{QUEUE.map((q,i)=>(<div key={i} style={{background:"#0a0d12",border:"1px solid #0c1c28",borderLeft:"3px solid #007848",borderRadius:3,padding:"11px 13px",marginBottom:8}}><div style={{fontSize:10,color:"#fff",marginBottom:5}}>{q.question}</div><div style={{display:"flex",gap:16,marginBottom:5}}><span style={{fontSize:9,color:"#c8d8e0"}}>Mkt: <span style={{color:"#fff"}}>{q.price?.toFixed(2)}</span></span><span style={{fontSize:9,color:"#c8d8e0"}}>Edge: <span style={{color:"#f0c070"}}>+{fmtPct(q.edge||0)}</span></span><span style={{fontSize:9,color:"#c8d8e0"}}>Conf: <span style={{color:"#00a858"}}>{q.confidence}</span></span></div><div style={{fontSize:9,color:"#c8d8e0",fontStyle:"italic"}}>"{q.thesis}"</div></div>))}</div>)}
+            {desktopTab==="queue"&&(QUEUE.length===0?<div style={{padding:"40px",textAlign:"center",color:"#8ab8c8",fontSize:11}}>No theses yet</div>:<div style={{padding:"12px"}}>{QUEUE.map((q,i)=>(<div key={i} style={{background:"#0a0d12",border:"1px solid #0c1c28",borderLeft:"3px solid #007848",borderRadius:3,padding:"11px 13px",marginBottom:8}}><div style={{fontSize:10,color:"#fff",marginBottom:5}}>{q.question}</div><div style={{display:"flex",gap:16,marginBottom:5}}><span style={{fontSize:9,color:"#c8d8e0"}}>Mkt: <span style={{color:"#fff"}}>{q.price?.toFixed(2)}</span></span><span style={{fontSize:9,color:"#c8d8e0"}}>Edge: <span style={{color:"#f0c070"}}>+{fmtPct(q.edge||0)}</span></span><span style={{fontSize:9,color:"#c8d8e0"}}>Conf: <span style={{color:"#00a858"}}>{q.confidence}</span></span><span style={{fontSize:9,color:"#c8d8e0"}}>Bet: <span style={{color:"#f0c070"}}>{fmt$(q.suggested_size||0)}</span></span></div><div style={{fontSize:9,color:"#c8d8e0",fontStyle:"italic"}}>"{q.thesis}"</div></div>))}</div>)}
           </div>
         </div>
 

@@ -173,9 +173,9 @@ def run_scanner():
         params = {
             "active": "true",
             "closed": "false",
-            "limit": 100,
+            "limit": 500,
             "order": "volume",
-            "ascending": "true"
+            "ascending": "false"
         }
         response = http_requests.get(url, params=params, timeout=30)
         markets = response.json()
@@ -347,6 +347,14 @@ def run_brain():
 
                 result["condition_id"] = market["condition_id"]
                 result["question"] = q
+                # Calculate suggested size for display
+                suggested = kelly_size(
+                    p_win=result.get("our_probability", 0),
+                    market_price=result.get("market_price", 0.5),
+                    bankroll=portfolio.get_balance(),
+                    confidence=result.get("confidence", 50)
+                )
+                result["suggested_size"] = suggested
                 theses.append(result)
 
                 detail_parts = [
