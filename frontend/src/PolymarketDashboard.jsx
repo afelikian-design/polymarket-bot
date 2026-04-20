@@ -723,7 +723,7 @@ export default function Dashboard() {
             </div>
           </div>
           {/* Activity Feed */}
-          <div ref={activityRef} style={{overflowY:"auto",flex:2,padding:"4px 0",borderBottom:"1px solid #0c1c28"}}>
+          <div ref={activityRef} style={{overflowY:"auto",flex:1,minHeight:0,padding:"4px 0",borderBottom:"1px solid #0c1c28"}}>
             {activity.length===0?(
               <div style={{padding:"16px 14px",color:"#304858",fontSize:10,textAlign:"center"}}>Waiting for bot activity...</div>
             ):activity.map((log,i)=>{
