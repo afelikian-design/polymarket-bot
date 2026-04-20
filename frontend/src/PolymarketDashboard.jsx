@@ -150,6 +150,7 @@ export default function Dashboard() {
   const [activity, setActivity]   = useState([]);
   const [insights, setInsights]   = useState(null);
   const [categoryStats, setCategoryStats] = useState([]);
+  const [showRealized, setShowRealized] = useState(false);
   const [prevActivityId, setPrevActivityId] = useState(null);
   const [newActivity, setNewActivity] = useState(false);
 
@@ -182,7 +183,8 @@ export default function Dashboard() {
           const src = filtered.length > 0 ? filtered : snaps;
           const chartData = src.map(s=>({
             time: new Date(s.time).toLocaleTimeString("en-US",{timeZone:"America/Los_Angeles",hour:"2-digit",minute:"2-digit"}),
-            balance: s.balance + (s.open_pnl||0)
+            balance: s.balance + (s.open_pnl||0),
+            realized: s.balance
           }));
           setPnlData(chartData);
         }
@@ -234,12 +236,14 @@ export default function Dashboard() {
           timeZone: "America/Los_Angeles",
           hour: "2-digit", minute: "2-digit",
         }),
-        balance: s.balance + (s.open_pnl || 0)
+        balance: s.balance + (s.open_pnl || 0),
+        realized: s.balance
       }));
       setPnlData(chartData);
     }
   };
-  const p0=pnlData[0]?.balance??1000, pN=pnlData[pnlData.length-1]?.balance??1000, pd=pN-p0;
+  const chartKey = showRealized ? "realized" : "balance";
+  const p0=pnlData[0]?.[chartKey]??1000, pN=pnlData[pnlData.length-1]?.[chartKey]??1000, pd=pN-p0;
 
   // ── MOBILE LAYOUT ─────────────────────────────────────────
   if (isMobile) {
@@ -297,7 +301,10 @@ export default function Dashboard() {
               <div className="mob-card">
                 <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
                   <span style={{fontSize:10,color:"#8ab8c8",letterSpacing:".14em"}}>PORTFOLIO</span>
-                  <span style={{fontSize:12,color:pd>=0?"#00ff8c":"#ff4455",fontWeight:500}}>{sign(pd)}{fmt$(pd)}</span>
+                  <div style={{display:"flex",alignItems:"center",gap:6}}>
+                    <span style={{fontSize:12,color:pd>=0?"#00ff8c":"#ff4455",fontWeight:500}}>{sign(pd)}{fmt$(pd)}</span>
+                    <button onClick={()=>setShowRealized(r=>!r)} style={{fontSize:7,padding:"2px 6px",borderRadius:3,background:showRealized?"#0a1e14":"#0a0d12",border:showRealized?"1px solid #00ff8c44":"1px solid #1a2a38",color:showRealized?"#00ff8c":"#4a6070",cursor:"pointer"}}>{showRealized?"REALIZED":"TOTAL"}</button>
+                  </div>
                 </div>
                 {/* Timeframe toggles */}
                 <div style={{display:"flex",gap:4,marginBottom:10,background:"#07090c",borderRadius:6,padding:3}}>
@@ -318,7 +325,7 @@ export default function Dashboard() {
                     <YAxis tick={{fill:"#8ab8c8",fontSize:8}} axisLine={false} tickLine={false} width={40} tickFormatter={v=>`$${v.toFixed(0)}`} domain={["auto","auto"]}/>
                     <Tooltip contentStyle={{background:"#0b0e14",border:"1px solid #0c1c28",borderRadius:6,fontSize:11}} formatter={v=>[fmt$(v),"Balance"]}/>
                     <ReferenceLine y={p0} stroke="#8ab8c8" strokeDasharray="3 3"/>
-                    <Line type="monotone" dataKey="balance" stroke="url(#lg)" strokeWidth={2} dot={false} activeDot={{r:4,fill:"#00ff8c"}}/>
+                    <Line type="monotone" dataKey={chartKey} stroke="url(#lg)" strokeWidth={2} dot={false} activeDot={{r:4,fill:"#00ff8c"}}/>
                   </LineChart>
                 </ResponsiveContainer>
               </div>
@@ -637,9 +644,10 @@ export default function Dashboard() {
                   ))}
                 </div>
               </div>
-              <div style={{display:"flex",gap:14}}>
+              <div style={{display:"flex",gap:14,alignItems:"center"}}>
                 <span style={{fontSize:12,color:pd>=0?"#00ff8c":"#ff4455",fontWeight:500}}>{sign(pd)}{fmt$(pd)}</span>
                 <span style={{fontSize:11,color:"#c8d8e0"}}>{sign(pd)}{((pd/p0)*100).toFixed(2)}%</span>
+                <button onClick={()=>setShowRealized(r=>!r)} style={{fontSize:8,padding:"2px 8px",borderRadius:3,background:showRealized?"#0a1e14":"#0a0d12",border:showRealized?"1px solid #00ff8c44":"1px solid #1a2a38",color:showRealized?"#00ff8c":"#4a6070",cursor:"pointer"}}>{showRealized?"REALIZED":"TOTAL"}</button>
               </div>
             </div>
             <ResponsiveContainer width="100%" height={80}>
@@ -649,7 +657,7 @@ export default function Dashboard() {
                 <YAxis tick={{fill:"#8ab8c8",fontSize:8}} axisLine={false} tickLine={false} width={44} tickFormatter={v=>`$${v.toFixed(0)}`} domain={["auto","auto"]}/>
                 <Tooltip contentStyle={{background:"#0b0e14",border:"1px solid #0c1c28",borderRadius:3,fontSize:10}} labelStyle={{color:"#c8d8e0"}} itemStyle={{color:"#00ff8c"}} formatter={v=>[fmt$(v),"Balance"]}/>
                 <ReferenceLine y={p0} stroke="#8ab8c8" strokeDasharray="3 3"/>
-                <Line type="monotone" dataKey="balance" stroke="url(#lg2)" strokeWidth={1.5} dot={false} activeDot={{r:3,fill:"#00ff8c"}}/>
+                <Line type="monotone" dataKey={chartKey} stroke="url(#lg2)" strokeWidth={1.5} dot={false} activeDot={{r:3,fill:"#00ff8c"}}/>
               </LineChart>
             </ResponsiveContainer>
           </div>
