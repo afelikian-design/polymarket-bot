@@ -136,7 +136,7 @@ const NAV_ITEMS = [
 export default function Dashboard() {
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
   const [tfIdx, setTfIdx]       = useState(2);
-  const [pnlData, setPnlData]   = useState(() => generatePnL(96, 15));
+  const [pnlData, setPnlData]   = useState(null);
   const [mobileTab, setMobileTab] = useState("overview");
   const [desktopTab, setDesktopTab] = useState("positions");
   const [wTab, setWTab]         = useState("leaderboard");
@@ -179,7 +179,7 @@ export default function Dashboard() {
           fetch(`${API_BASE}/api/insights`).then(r=>r.json()).catch(()=>null),
         ]);
         setPortfolio(port); setPositions(pos); setTrades(trd); setAgentData(agt); setQueue(queue);
-        if(snaps && snaps.length > 0){
+        if(snaps && snaps.length > 0 && pnlData === null){
           const chartData = snaps.map(s=>({
             time: new Date(s.time).toLocaleTimeString("en-US",{timeZone:"America/Los_Angeles",hour:"2-digit",minute:"2-digit"}),
             balance: s.balance + (s.open_pnl||0)
