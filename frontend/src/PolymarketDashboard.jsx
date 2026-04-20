@@ -213,7 +213,28 @@ export default function Dashboard() {
 
   useEffect(()=>{const t=setInterval(()=>setElapsed(e=>e+1),1000);return()=>clearInterval(t);},[]);
 
-  const switchTf = (i) => { setTfIdx(i); setPnlData(generatePnL(TIMEFRAMES[i].points,TIMEFRAMES[i].interval)); };
+  const switchTf = (i) => {
+    setTfIdx(i);
+    const tf = TIMEFRAMES[i];
+    const now = Date.now();
+    const cutoff = tf.label === "ALL" ? 0 : now - tf.points * tf.interval * 60 * 1000;
+    fetch(`${API_BASE}/api/snapshots`)
+      .then(r => r.json())
+      .then(snaps => {
+        const filtered = snaps.filter(s => tf.label === "ALL" || new Date(s.time).getTime() >= cutoff);
+        if (filtered.length > 0) {
+          const chartData = filtered.map(s => ({
+            time: new Date(s.time).toLocaleTimeString("en-US", {
+              timeZone: "America/Los_Angeles",
+              hour: "2-digit", minute: "2-digit",
+            }),
+            balance: s.balance + (s.open_pnl || 0)
+          }));
+          setPnlData(chartData);
+        }
+      })
+      .catch(() => {});
+  };
   const p0=pnlData[0]?.balance??1000, pN=pnlData[pnlData.length-1]?.balance??1000, pd=pN-p0;
 
   // ── MOBILE LAYOUT ─────────────────────────────────────────

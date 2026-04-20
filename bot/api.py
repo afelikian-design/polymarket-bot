@@ -10,6 +10,19 @@ app = Flask(__name__)
 CORS(app)
 db = init_db(Config.DB_PATH)
 
+def _get_daily_pnl():
+    from datetime import timezone
+    import pytz
+    pacific = pytz.timezone("America/Los_Angeles")
+    now_pacific = datetime.now(pacific)
+    today_midnight_pacific = now_pacific.replace(hour=0, minute=0, second=0, microsecond=0)
+    today_midnight_utc = today_midnight_pacific.astimezone(timezone.utc).replace(tzinfo=None)
+    trades = db.query(Position).filter(
+        Position.status == "CLOSED",
+        Position.closed_at >= today_midnight_utc
+    ).all()
+    return round(sum(p.pnl or 0 for p in trades), 2)
+
 @app.route("/api/portfolio")
 def get_portfolio():
     snap = db.query(WalletSnapshot)\
@@ -24,7 +37,7 @@ def get_portfolio():
     )
     return jsonify({
         "balance":        snap.balance if snap else 1000.0,
-        "daily_pnl":      snap.daily_pnl if snap else 0.0,
+        "daily_pnl":      _get_daily_pnl(),
         "open_pnl":       round(open_pnl, 2),
         "win_rate":       win_rate,
         "open_positions": len(open_pos),
@@ -112,18 +125,21 @@ def get_whale_signals():
 
 @app.route("/api/queue")
 def get_queue():
-    theses = db.query(PrebuiltThesis)\
-        .filter_by(active=True, triggered=False)\
-        .order_by(PrebuiltThesis.confidence.desc()).limit(20).all()
-    return jsonify([{
-        "condition_id":   t.condition_id,
-        "question":       t.question,
-        "price":          t.market_price_at_build,
-        "our_probability":t.our_probability,
-        "edge":           t.edge,
-        "confidence":     t.confidence,
-        "thesis":         t.thesis,
-    } for t in theses])
+    import json as _json
+    try:
+        with open("thesis.json") as f:
+            theses = _json.load(f)
+        return jsonify([{
+            "condition_id":    t.get("condition_id"),
+            "question":        t.get("question"),
+            "price":           t.get("market_price"),
+            "our_probability": t.get("our_probability"),
+            "edge":            t.get("edge"),
+            "confidence":      t.get("confidence"),
+            "thesis":          t.get("thesis"),
+        } for t in theses])
+    except:
+        return jsonify([])
 
 @app.route("/api/risk")
 def get_risk():
@@ -133,6 +149,7 @@ def get_risk():
         "max_drawdown":       Config.MAX_DRAWDOWN,
         "max_kelly":          Config.MAX_KELLY_FRACTION,
         "max_open_positions": Config.MAX_OPEN_POSITIONS,
+        "min_confidence":      Config.MIN_CONFIDENCE,
     })
 
 @app.route("/api/control/start", methods=["POST"])

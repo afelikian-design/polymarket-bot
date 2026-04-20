@@ -175,7 +175,7 @@ def run_scanner():
             "closed": "false",
             "limit": 100,
             "order": "volume",
-            "ascending": "false"
+            "ascending": "true"
         }
         response = http_requests.get(url, params=params, timeout=30)
         markets = response.json()
@@ -209,7 +209,7 @@ def run_scanner():
                 if hours < Config.MIN_HOURS or hours > Config.MAX_HOURS:
                     continue
                 volume = float(m.get("volume", 0) or 0)
-                if volume < Config.MIN_VOLUME:
+                if volume < Config.MIN_VOLUME or volume > Config.MAX_VOLUME:
                     continue
                 best_bid = float(m.get("bestBid", 0) or 0)
                 best_ask = float(m.get("bestAsk", 1) or 1)
@@ -290,26 +290,39 @@ def run_brain():
                 detail="Price: {} | {}h remaining | Vol: ${:,.0f}".format(price, hours, volume))
 
             try:
-                prompt = "Evaluate this prediction market for a trading opportunity.\n\n"
+                prompt = "You are a prediction market trader. Before analyzing, search the web for recent news relevant to this market.\n\n"
                 prompt += "Market: {}\n".format(q)
                 prompt += "Current price: {} (implies {}% probability)\n".format(price, round(price * 100))
                 prompt += "Hours until resolution: {}\n".format(hours)
                 prompt += "Volume: ${:,.0f}\n\n".format(volume)
-                prompt += "Analyze for mispricing. Respond ONLY with valid JSON, no markdown, no extra text:\n"
+                prompt += "Step 1: Search for recent news, data, or events relevant to this market question.\n"
+                prompt += "Step 2: Based on what you find, estimate the TRUE probability of YES resolution.\n"
+                prompt += "Step 3: Respond ONLY with valid JSON, no markdown, no extra text:\n"
                 prompt += '{"our_probability": 0.55, "market_price": ' + str(price) + ', '
                 prompt += '"edge": 0.10, "direction": "OVER", '
                 prompt += '"confidence": 75, "crowd_error": "describe error or null", '
-                prompt += '"base_rate_note": "brief note", "thesis": "one sentence", "action": "BUY"}'
-                prompt += "\n\nReplace all values with your real analysis. Set action to SKIP if edge < 0.07 or confidence < 70."
+                prompt += '"base_rate_note": "what recent news or data supports your estimate", "thesis": "one sentence including what you found", "action": "BUY"}'
+                prompt += "\n\nSet action to SKIP if edge < 0.07 or confidence < 70. Be conservative — only BUY when you found real evidence."
 
                 response = claude.messages.create(
                     model=Config.CLAUDE_MODEL,
-                    max_tokens=500,
+                    max_tokens=1500,
+                    tools=[{"type": "web_search_20250305", "name": "web_search"}],
                     messages=[{"role": "user", "content": prompt}]
                 )
 
-                text = response.content[0].text.strip()
-                text = text.replace("```json", "").replace("```", "").strip()
+                # Extract text from response — may include web search tool use blocks
+                text = ""
+                for block in response.content:
+                    if hasattr(block, "type") and block.type == "text":
+                        text += block.text
+                text = text.strip().replace("```json", "").replace("```", "").strip()
+                # Find JSON in response
+                start = text.find("{")
+                end = text.rfind("}") + 1
+                if start == -1 or end == 0:
+                    raise ValueError("No JSON found in response")
+                text = text[start:end]
                 result = json.loads(text)
 
                 our_prob = result.get("our_probability", 0)
@@ -456,6 +469,26 @@ def run_executor():
                     "Risk block: {}".format(reason), market=q)
                 continue
 
+            # Price stability check — skip if price moved >2 cents since brain evaluated
+            try:
+                r = http_requests.get(
+                    "https://clob.polymarket.com/markets/{}".format(condition_id),
+                    timeout=8
+                )
+                if r.status_code == 200:
+                    tokens = r.json().get("tokens", [])
+                    if tokens:
+                        live_price = round(float(tokens[0].get("price", 0)), 4)
+                        brain_price = thesis.get("market_price", 0)
+                        if abs(live_price - brain_price) > 0.02:
+                            log_activity("executor", "SKIP",
+                                "Price moved {:.3f} -> {:.3f} since evaluation, skipping".format(
+                                    brain_price, live_price),
+                                market=q)
+                            continue
+            except Exception as e:
+                logger.debug("Stability check failed: {}".format(e))
+
             order_id = "PAPER-{}-{}".format(
                 condition_id[:8], int(datetime.utcnow().timestamp()))
 
@@ -541,7 +574,7 @@ def run_exit_monitor():
                 if current_price >= target:
                     should_exit = True
                     exit_reason = "TARGET_HIT"
-                elif pos.entry_price > 0 and current_price <= pos.entry_price * 0.75:
+                elif (pos.entry_price > 0 and current_price <= pos.entry_price * 0.75 and hours_held > 2) or                      (pnl < -15):
                     should_exit = True
                     exit_reason = "STOP_LOSS"
                 elif hours_held > Config.STALE_HOURS:
@@ -602,34 +635,31 @@ def run_strategy_analyzer():
     try:
         from database import Position, StrategyInsight
         import json, anthropic
-        session = SessionFactory()
 
-        # Get last 50 closed trades
-        trades = session.query(Position).filter_by(status="CLOSED").order_by(Position.closed_at.desc()).limit(50).all()
+        trades = db.query(Position).filter_by(status="CLOSED").order_by(Position.closed_at.desc()).limit(50).all()
         if len(trades) < 5:
             log_agent("strategy_analyzer", "idle", "Not enough trades to analyze yet")
-            session.close()
             return
 
-        # Build trade summary for Claude
         trade_lines = []
         for t in trades:
             pnl = t.pnl or 0
             win = "WIN" if pnl > 0 else ("LOSS" if pnl < 0 else "NEUTRAL")
             held = round((t.closed_at - t.opened_at).total_seconds() / 3600, 1) if t.closed_at and t.opened_at else 0
-            trade_lines.append(f"{win} | PnL: ${pnl:.2f} | Entry: {t.entry_price} | Exit: {t.exit_price} | Reason: {t.exit_reason} | Held: {held}h | Market: {t.question[:60]}")
+            trade_lines.append("{} | PnL: ${:.2f} | Entry: {} | Exit: {} | Reason: {} | Held: {}h | Market: {}".format(
+                win, pnl, t.entry_price, t.exit_price, t.exit_reason, held, (t.question or "")[:60]))
 
         trade_text = "\n".join(trade_lines)
         wins = sum(1 for t in trades if (t.pnl or 0) > 0)
         win_rate = round(wins / len(trades) * 100, 1)
         total_pnl = sum(t.pnl or 0 for t in trades)
 
-        prompt = f"""You are analyzing a Polymarket prediction market trading bot's recent performance.
+        prompt = """You are analyzing a Polymarket prediction market trading bot's recent performance.
 
-Here are the last {len(trades)} closed trades:
-{trade_text}
+Here are the last {} closed trades:
+{}
 
-Overall: {wins}/{len(trades)} wins ({win_rate}% win rate), Total PnL: ${total_pnl:.2f}
+Overall: {}/{} wins ({}% win rate), Total PnL: ${:.2f}
 
 Analyze this data and respond with ONLY a JSON object in this exact format:
 {{
@@ -638,15 +668,7 @@ Analyze this data and respond with ONLY a JSON object in this exact format:
   "recommendations": ["specific config change 1", "specific config change 2", "specific config change 3", "specific config change 4"]
 }}
 
-Focus on:
-- Which market categories are winning vs losing
-- Whether entry prices are too low (< 0.10 is risky)
-- Whether stop losses are triggering too often
-- Whether stale thesis is closing too many positions
-- Time patterns if visible
-- Specific actionable config changes with exact values
-
-Be specific and data-driven. No markdown, just the JSON object."""
+Focus on which market categories are winning vs losing, entry price quality, stop loss frequency, stale thesis patterns, and specific actionable config changes. No markdown, just the JSON object.""".format(len(trades), trade_text, wins, len(trades), win_rate, total_pnl)
 
         client = anthropic.Anthropic(api_key=Config.ANTHROPIC_API_KEY)
         response = client.messages.create(
@@ -656,7 +678,6 @@ Be specific and data-driven. No markdown, just the JSON object."""
         )
 
         raw = response.content[0].text.strip()
-        # Clean JSON
         if raw.startswith("```"):
             raw = raw.split("```")[1]
             if raw.startswith("json"):
@@ -673,18 +694,17 @@ Be specific and data-driven. No markdown, just the JSON object."""
             warnings=json.dumps(data.get("warnings", [])),
             raw_analysis=raw
         )
-        session.add(insight)
-        session.commit()
-        session.close()
+        db.add(insight)
+        db.commit()
 
-        log_agent("strategy_analyzer", "idle", f"Analysis complete: {len(data.get('recommendations',[]))} recommendations generated")
+        log_agent("strategy_analyzer", "idle", "Analysis complete: {} recommendations generated".format(len(data.get("recommendations", []))))
         log_activity("strategy_analyzer", "SCANNING",
-            f"Strategy analysis complete — {win_rate}% win rate on {len(trades)} trades",
+            "Strategy analysis complete - {}% win rate on {} trades".format(win_rate, len(trades)),
             detail=data.get("summary", "")[:100])
 
     except Exception as e:
-        log_agent("strategy_analyzer", "error", f"Analysis error: {e}")
-        logger.error(f"Strategy analyzer error: {e}")
+        log_agent("strategy_analyzer", "error", "Analysis error: {}".format(e))
+        logger.error("Strategy analyzer error: {}".format(e))
 
 def run_whale_monitor():
     log_agent("whale_monitor", "idle", "Monitoring markets for whale activity")

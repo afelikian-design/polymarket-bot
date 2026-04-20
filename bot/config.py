@@ -18,21 +18,22 @@ class Config:
 
     MAX_KELLY_FRACTION  = 0.10
     MIN_KELLY_FRACTION  = 0.01
-    MAX_OPEN_POSITIONS  = 20
+    MAX_OPEN_POSITIONS  = 10
     MAX_POSITION_PCT    = 0.15
     MIN_LIQUIDITY       = 2000
-    MIN_PRICE           = 0.10
-    MAX_PRICE           = 0.90
-    DAILY_LOSS_LIMIT    = -0.25
+    MIN_PRICE           = 0.05
+    MAX_PRICE           = 0.95
+    DAILY_LOSS_LIMIT    = -0.10
     MAX_DRAWDOWN        = -0.50
 
-    MIN_GAP             = 0.05
+    MIN_GAP             = 0.07
     MIN_HOURS           = 1
     MAX_HOURS           = 168
-    MIN_VOLUME          = 2_000
+    MIN_VOLUME          = 1000
+    MAX_VOLUME          = 150000
 
-    CLAUDE_MODEL        = "claude-haiku-4-5-20251001"
-    MIN_CONFIDENCE      = 60
+    CLAUDE_MODEL        = "claude-sonnet-4-6"
+    MIN_CONFIDENCE      = 70
     CONSENSUS_THRESHOLD = 2
 
     TARGET_CAPTURE      = 0.60
