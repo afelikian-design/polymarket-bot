@@ -556,7 +556,7 @@ export default function Dashboard() {
           <div style={{width:1,height:14,background:"#0c1c28"}}/>
           <span style={{fontSize:9,color:portfolio.paper_trading?"#f0c070":"#00ff8c",letterSpacing:".1em"}}>{portfolio.paper_trading?"PAPER MODE":"LIVE"}</span>
           <div style={{width:1,height:14,background:"#0c1c28"}}/>
-          <span style={{fontSize:9,color:"#c8d8e0"}}>{new Date().toUTCString().slice(5,22)} <span className="blink">_</span></span>
+          <span style={{fontSize:9,color:"#c8d8e0"}}>{new Date().toLocaleString("en-US",{timeZone:"America/Los_Angeles",month:"numeric",day:"numeric",year:"numeric",hour:"2-digit",minute:"2-digit",second:"2-digit"})} <span className="blink">_</span></span>
           {apiError&&<span style={{fontSize:9,color:"#ff4455",letterSpacing:".1em"}}>⚠ API OFFLINE</span>}
         </div>
         <div style={{display:"flex",gap:28}}>
