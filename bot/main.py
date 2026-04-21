@@ -778,9 +778,9 @@ def main():
     run_no_bot(db, portfolio)
     run_binance_bot(db, portfolio)
 
-    schedule.every(15).minutes.do(run_no_bot, db, portfolio)
+    schedule.every(5).minutes.do(run_no_bot, db, portfolio)
     schedule.every(1).minutes.do(run_binance_bot, db, portfolio)
-    schedule.every(5).minutes.do(run_exit_monitor, db, portfolio)
+    schedule.every(1).minutes.do(run_exit_monitor, db, portfolio)
     schedule.every(5).minutes.do(portfolio.snapshot)
 
     logger.info("All agents scheduled. Bot running 24/7.")
