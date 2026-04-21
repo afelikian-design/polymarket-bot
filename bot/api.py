@@ -320,3 +320,43 @@ def get_insights():
         "analyzed_at": insight.analyzed_at.isoformat() if insight.analyzed_at else None
     })
 
+
+
+@app.route("/api/whale_trades")
+def get_whale_trades():
+    import requests as req
+    wallets = [
+        {"address": "0x24c8cf69a0e0a17eee21f69d29752bfa32e823e1", "name": "debased"},
+        {"address": "0x6bab41a0dc40d6dd4c1a915b8c01969479fd1292", "name": "Dropper"},
+        {"address": "0x000d257d2dc7616feaef4ae0f14600fdf50a758e", "name": "scottilicious"},
+        {"address": "0x06dcaa14f57d8a0573f5dc5940565e6de667af59", "name": "Big.Chungus"},
+        {"address": "0xd5ccdf772f795547e299de57f47966e24de8dea4", "name": "tsybka"},
+        {"address": "0x751a2b86cab503496efd325c8344e10159349ea1", "name": "Sharky6999"},
+        {"address": "0x2a019dc0089ea8c6edbbafc8a7cc9ba77b4b6397", "name": "aviato"},
+        {"address": "0x011f2d377e56119fb09196dffb0948ae55711122", "name": "11122"},
+    ]
+    all_trades = []
+    for w in wallets:
+        try:
+            r = req.get(
+                "https://data-api.polymarket.com/activity",
+                params={"user": w["address"], "limit": 5, "type": "TRADE"},
+                timeout=8
+            )
+            if r.status_code == 200:
+                trades = r.json()
+                for t in trades:
+                    all_trades.append({
+                        "name": w["name"],
+                        "address": w["address"],
+                        "market": t.get("title") or t.get("market", ""),
+                        "side": t.get("side", "BUY"),
+                        "price": t.get("price", 0),
+                        "size": t.get("cash", t.get("size", 0)),
+                        "outcome": t.get("outcome", "YES"),
+                        "timestamp": t.get("timestamp", ""),
+                    })
+        except Exception:
+            continue
+    all_trades.sort(key=lambda x: x.get("timestamp", ""), reverse=True)
+    return jsonify(all_trades[:30])

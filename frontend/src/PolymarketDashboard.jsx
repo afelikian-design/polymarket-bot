@@ -110,6 +110,7 @@ export default function Dashboard() {
   const [activity, setActivity]   = useState([]);
   const [insights, setInsights]   = useState(null);
   const [categoryStats, setCategoryStats] = useState([]);
+  const [whaleTrades, setWhaleTrades] = useState([]);
   const [showRealized, setShowRealized] = useState(false);
   const [prevActivityId, setPrevActivityId] = useState(null);
   const [newActivity, setNewActivity] = useState(false);
@@ -578,14 +579,19 @@ export default function Dashboard() {
             {WHALES.map((w,i)=>(<WhaleCard key={i} w={w}/>))}
           </div>
           <div style={{marginTop:8}}>
-            <div style={{fontSize:8,color:"#8ab8c8",letterSpacing:".18em",marginBottom:6}}>RECENT WHALE TRADES</div>
-            {WHALES.flatMap(w=>w.recent.map(t=>({...t,address:w.address,tier:w.tier}))).slice(0,10).map((t,i)=>(
-              <div key={i} style={{padding:"4px 0",borderBottom:"1px solid #0a0c10",display:"flex",alignItems:"center",gap:5}}>
-                <span style={{fontSize:7,padding:"1px 4px",borderRadius:2,background:t.side==="BUY"?"#002010":"#200010",color:t.side==="BUY"?"#00a858":"#ff4455",flexShrink:0,fontWeight:600}}>{t.side}</span>
-                <span style={{fontSize:7,color:"#c8d8e0",flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{t.market}</span>
-                <span style={{fontSize:7,fontWeight:600,color:t.pnl.startsWith("+")?"#00a858":t.pnl.startsWith("-")?"#ff4455":"#8ab8c8",whiteSpace:"nowrap",flexShrink:0}}>{t.pnl}</span>
+            <div style={{fontSize:8,color:"#8ab8c8",letterSpacing:".18em",marginBottom:6}}>RECENT WHALE TRADES · LIVE</div>
+            {whaleTrades.slice(0,20).map((t,i)=>(
+              <div key={i} style={{padding:"4px 0",borderBottom:"1px solid #0a0c10"}}>
+                <div style={{display:"flex",alignItems:"center",gap:5,marginBottom:1}}>
+                  <span style={{fontSize:6,padding:"1px 4px",borderRadius:2,background:t.side==="BUY"?"#002010":"#200010",color:t.side==="BUY"?"#00a858":"#ff4455",flexShrink:0,fontWeight:600}}>{t.side}</span>
+                  <span style={{fontSize:6,color:"#f0c070",flexShrink:0,fontWeight:600}}>{t.name}</span>
+                  <span style={{fontSize:6,color:"#4a7080",flexShrink:0}}>${(Number(t.size)||0).toFixed(0)}</span>
+                  <span style={{fontSize:6,color:"#4a7080",flexShrink:0}}>@{(Number(t.price)||0).toFixed(3)}</span>
+                </div>
+                <div style={{fontSize:6,color:"#c8d8e0",paddingLeft:4,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{t.market}</div>
               </div>
             ))}
+            {whaleTrades.length===0&&<div style={{fontSize:7,color:"#304858",padding:"4px 0"}}>Loading live trades...</div>}
           </div>
         </div>
 
