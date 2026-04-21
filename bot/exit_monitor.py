@@ -95,13 +95,14 @@ def run_exit_monitor(db, portfolio):
                 is_copy = condition_id.startswith("COPY-")
 
                 if is_copy:
-                    # Copy trades follow YES — take profit when YES hits 0.85+
-                    if not should_close and pos.current_price >= 0.85:
+                    # Copy trades — only exit on resolution or extreme moves
+                    # Take profit when price hits 0.99 (near certain resolution)
+                    if not should_close and pos.current_price >= 0.99:
                         should_close = True
                         exit_reason = "TAKE_PROFIT"
                         exit_price = pos.current_price
-                    # Stop loss when YES drops below 0.15
-                    if not should_close and pos.current_price <= 0.15 and hours_held > 2:
+                    # Stop loss when price drops below 0.05 (trade going badly wrong)
+                    if not should_close and pos.current_price <= 0.05 and hours_held > 2:
                         should_close = True
                         exit_reason = "STOP_LOSS"
                         exit_price = pos.current_price
