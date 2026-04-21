@@ -486,16 +486,27 @@ export default function Dashboard() {
               ))}
               <div style={{marginTop:16,marginBottom:6,fontSize:9,color:"#8ab8c8",letterSpacing:".18em"}}>RECENT WHALE TRADES · LIVE</div>
               {whaleTrades.slice(0,20).map((t,i)=>(
-                <div key={i} style={{padding:"6px 0",borderBottom:"1px solid #0a0c10"}}>
-                  <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:2}}>
-                    <span style={{fontSize:8,padding:"1px 5px",borderRadius:2,background:t.side==="BUY"?"#002010":"#200010",color:t.side==="BUY"?"#00a858":"#ff4455",fontWeight:600}}>{t.side}</span>
-                    <span style={{fontSize:8,color:"#f0c070",fontWeight:600}}>{t.name}</span>
-                    <span style={{fontSize:8,color:"#4a7080"}}>${(Number(t.size)||0).toFixed(0)}</span>
-                    <span style={{fontSize:8,color:"#4a7080"}}>@{(Number(t.price)||0).toFixed(3)}</span>
-                    <span style={{fontSize:7,color:"#304858",marginLeft:"auto"}}>{t.timestamp?new Date(Number(t.timestamp)*1000).toLocaleDateString([],{month:"short",day:"numeric",hour:"2-digit",minute:"2-digit"}):"—"}</span>
+                <details key={i} style={{borderBottom:"1px solid #0a0c10",padding:"4px 0",cursor:"pointer"}}>
+                  <summary style={{listStyle:"none",outline:"none"}}>
+                    <div style={{display:"flex",alignItems:"center",gap:5,marginBottom:1}}>
+                      <span style={{fontSize:6,padding:"1px 4px",borderRadius:2,background:t.side==="BUY"?"#002010":"#200010",color:t.side==="BUY"?"#00a858":"#ff4455",flexShrink:0,fontWeight:600}}>{t.side}</span>
+                      <span style={{fontSize:7,color:"#f0c070",flexShrink:0,fontWeight:600}}>{t.name}</span>
+                      <span style={{fontSize:7,color:"#8ab8c8",flexShrink:0}}>${(Number(t.size)||0).toFixed(0)}</span>
+                      <span style={{fontSize:6,color:"#4a7080",flexShrink:0}}>@{(Number(t.price)||0).toFixed(3)}</span>
+                      <span style={{fontSize:7,color:"#8ab8c8",flexShrink:0,marginLeft:"auto",whiteSpace:"nowrap"}}>{t.timestamp?new Date(Number(t.timestamp)*1000).toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"}):"—"}</span>
+                    </div>
+                    <div style={{fontSize:6,color:"#c8d8e0",paddingLeft:4,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{t.market}</div>
+                  </summary>
+                  <div style={{padding:"4px",marginTop:2,background:"#060809",borderRadius:2}}>
+                    <div style={{fontSize:7,color:"#c8d8e0",lineHeight:1.5,wordBreak:"break-word"}}>{t.market}</div>
+                    <div style={{display:"flex",gap:8,marginTop:3,flexWrap:"wrap"}}>
+                      <span style={{fontSize:6,color:"#4a7080"}}>Outcome: <span style={{color:"#c8d8e0"}}>{t.outcome||"—"}</span></span>
+                      <span style={{fontSize:6,color:"#4a7080"}}>Size: <span style={{color:"#f0c070"}}>${(Number(t.size)||0).toFixed(2)}</span></span>
+                      <span style={{fontSize:6,color:"#4a7080"}}>Price: <span style={{color:"#c8d8e0"}}>{(Number(t.price)||0).toFixed(4)}</span></span>
+                      <span style={{fontSize:6,color:"#4a7080"}}>Time: <span style={{color:"#8ab8c8"}}>{t.timestamp?new Date(Number(t.timestamp)*1000).toLocaleString([],{month:"short",day:"numeric",hour:"2-digit",minute:"2-digit"}):"—"}</span></span>
+                    </div>
                   </div>
-                  <div style={{fontSize:8,color:"#c8d8e0",paddingLeft:4,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{t.market}</div>
-                </div>
+                </details>
               ))}
               {whaleTrades.length===0&&<div style={{fontSize:8,color:"#304858",padding:"8px 0"}}>Loading live trades...</div>}
             </div>
@@ -594,19 +605,29 @@ export default function Dashboard() {
           </div>
           <div style={{marginTop:8}}>
             <div style={{fontSize:8,color:"#8ab8c8",letterSpacing:".18em",marginBottom:6}}>RECENT WHALE TRADES · LIVE</div>
-            {whaleTrades.slice(0,20).map((t,i)=>(
-              <div key={i} style={{padding:"4px 0",borderBottom:"1px solid #0a0c10"}}>
-                <div style={{display:"flex",alignItems:"center",gap:5,marginBottom:1}}>
-                  <span style={{fontSize:6,padding:"1px 4px",borderRadius:2,background:t.side==="BUY"?"#002010":"#200010",color:t.side==="BUY"?"#00a858":"#ff4455",flexShrink:0,fontWeight:600}}>{t.side}</span>
-                  <span style={{fontSize:6,color:"#f0c070",flexShrink:0,fontWeight:600}}>{t.name}</span>
-                  <span style={{fontSize:6,color:"#4a7080",flexShrink:0}}>${(Number(t.size)||0).toFixed(0)}</span>
-                  <span style={{fontSize:6,color:"#4a7080",flexShrink:0}}>@{(Number(t.price)||0).toFixed(3)}</span>
-                  <span style={{fontSize:6,color:"#304858",flexShrink:0,marginLeft:"auto"}}>{t.timestamp?new Date(Number(t.timestamp)*1000).toLocaleDateString([],{month:"short",day:"numeric",hour:"2-digit",minute:"2-digit"}):"—"}</span>
-                  <span style={{fontSize:6,color:"#304858",flexShrink:0,marginLeft:"auto"}}>{t.timestamp?new Date(Number(t.timestamp)*1000).toLocaleDateString([],{month:"short",day:"numeric",hour:"2-digit",minute:"2-digit"}):"—"}</span>
-                </div>
-                <div style={{fontSize:6,color:"#c8d8e0",paddingLeft:4,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{t.market}</div>
-              </div>
-            ))}
+              {whaleTrades.slice(0,20).map((t,i)=>(
+                <details key={i} style={{borderBottom:"1px solid #0a0c10",padding:"4px 0",cursor:"pointer"}}>
+                  <summary style={{listStyle:"none",outline:"none"}}>
+                    <div style={{display:"flex",alignItems:"center",gap:5,marginBottom:1}}>
+                      <span style={{fontSize:6,padding:"1px 4px",borderRadius:2,background:t.side==="BUY"?"#002010":"#200010",color:t.side==="BUY"?"#00a858":"#ff4455",flexShrink:0,fontWeight:600}}>{t.side}</span>
+                      <span style={{fontSize:7,color:"#f0c070",flexShrink:0,fontWeight:600}}>{t.name}</span>
+                      <span style={{fontSize:7,color:"#8ab8c8",flexShrink:0}}>${(Number(t.size)||0).toFixed(0)}</span>
+                      <span style={{fontSize:6,color:"#4a7080",flexShrink:0}}>@{(Number(t.price)||0).toFixed(3)}</span>
+                      <span style={{fontSize:7,color:"#8ab8c8",flexShrink:0,marginLeft:"auto",whiteSpace:"nowrap"}}>{t.timestamp?new Date(Number(t.timestamp)*1000).toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"}):"—"}</span>
+                    </div>
+                    <div style={{fontSize:6,color:"#c8d8e0",paddingLeft:4,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{t.market}</div>
+                  </summary>
+                  <div style={{padding:"4px",marginTop:2,background:"#060809",borderRadius:2}}>
+                    <div style={{fontSize:7,color:"#c8d8e0",lineHeight:1.5,wordBreak:"break-word"}}>{t.market}</div>
+                    <div style={{display:"flex",gap:8,marginTop:3,flexWrap:"wrap"}}>
+                      <span style={{fontSize:6,color:"#4a7080"}}>Outcome: <span style={{color:"#c8d8e0"}}>{t.outcome||"—"}</span></span>
+                      <span style={{fontSize:6,color:"#4a7080"}}>Size: <span style={{color:"#f0c070"}}>${(Number(t.size)||0).toFixed(2)}</span></span>
+                      <span style={{fontSize:6,color:"#4a7080"}}>Price: <span style={{color:"#c8d8e0"}}>{(Number(t.price)||0).toFixed(4)}</span></span>
+                      <span style={{fontSize:6,color:"#4a7080"}}>Time: <span style={{color:"#8ab8c8"}}>{t.timestamp?new Date(Number(t.timestamp)*1000).toLocaleString([],{month:"short",day:"numeric",hour:"2-digit",minute:"2-digit"}):"—"}</span></span>
+                    </div>
+                  </div>
+                </details>
+              ))}
             {whaleTrades.length===0&&<div style={{fontSize:7,color:"#304858",padding:"4px 0"}}>Loading live trades...</div>}
           </div>
         </div>
