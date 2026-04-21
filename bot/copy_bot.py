@@ -16,7 +16,25 @@ WALLETS = [
     {'address': '0x011f2d377e56119fb09196dffb0948ae55711122', 'name': '11122',         'win_rate': 0.63, 'signal_weight': 0.5},
 ]
 
-known_positions = {}
+import json, os
+_KP_FILE = '/root/polymarket-bot/bot/known_positions.json'
+
+def _load_kp():
+    try:
+        if os.path.exists(_KP_FILE):
+            raw = json.load(open(_KP_FILE))
+            return {k: set(v) for k,v in raw.items()}
+    except Exception:
+        pass
+    return {}
+
+def _save_kp(kp):
+    try:
+        json.dump({k: list(v) for k,v in kp.items()}, open(_KP_FILE,'w'))
+    except Exception:
+        pass
+
+known_positions = _load_kp()
 
 def log_agent(db, status, message):
     entry = AgentLog(agent='copy_bot', status=status, message=message)
@@ -87,6 +105,7 @@ def run_copy_bot(db, portfolio):
         prev_ids = known_positions.get(address, set())
         new_ids = current_ids - prev_ids
         known_positions[address] = current_ids
+        _save_kp(known_positions)
 
         if not prev_ids:
             log_activity(db, 'SCANNING',
@@ -106,8 +125,8 @@ def run_copy_bot(db, portfolio):
 
             question = p.get('title') or p.get('question', 'Unknown market')
             size = float(p.get('currentValue') or p.get('size') or 0)
-            if size < 1000:
-                continue  # Only copy high-conviction trades >$1,000
+            if size < 100:
+                continue  # Only copy trades >$100
 
             price = get_market_price(cid)
             existing = db.query(Position).filter_by(id='COPY-' + cid, status='OPEN').first()
