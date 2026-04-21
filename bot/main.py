@@ -784,6 +784,7 @@ def main():
     schedule.every(1).minutes.do(run_exit_monitor, db, portfolio)
     schedule.every(2).minutes.do(run_copy_bot, db, portfolio)
     schedule.every(5).minutes.do(portfolio.snapshot)
+    schedule.every(12).hours.do(run_strategy_analyzer)
 
     logger.info("All agents scheduled. Bot running 24/7.")
 
