@@ -16,54 +16,14 @@ const generatePnL = () => {
 };
 
 const WHALES = [
-  { address: "0x3f8a...c41d", tier: 1, win_rate: 0.81, total_pnl: 184200, total_trades: 847, best_category: "macro", signal_weight: 1.0, active: true,
-    recent: [
-      { market: "Will Fed cut rates before July?", side: "BUY", price: 0.54, outcome: "YES", pnl: "+$2,840" },
-      { market: "Will ECB cut rates in June?",     side: "BUY", price: 0.61, outcome: "YES", pnl: "+$1,120" },
-      { market: "CPI below 3.0% in March?",        side: "SELL",price: 0.72, outcome: "YES", pnl: "+$4,210" },
-    ]},
-  { address: "0x7c2b...9f3e", tier: 1, win_rate: 0.78, total_pnl: 142800, total_trades: 623, best_category: "politics", signal_weight: 1.0, active: true,
-    recent: [
-      { market: "Trump sign crypto EO in Q2?",     side: "BUY", price: 0.41, outcome: "YES", pnl: "+$8,100" },
-      { market: "Senate pass AI bill in Q1?",       side: "SELL",price: 0.28, outcome: "NO",  pnl: "-$1,200" },
-      { market: "Biden endorse Harris?",            side: "BUY", price: 0.88, outcome: "YES", pnl: "+$3,340" },
-    ]},
-  { address: "0xa91e...2b7c", tier: 1, win_rate: 0.76, total_pnl: 118400, total_trades: 1204, best_category: "crypto", signal_weight: 1.0, active: false,
-    recent: [
-      { market: "BTC exceed $100K by April?",      side: "BUY", price: 0.38, outcome: "PENDING", pnl: "—" },
-      { market: "ETH ETF AUM exceed $10B?",        side: "BUY", price: 0.44, outcome: "YES", pnl: "+$9,900" },
-      { market: "Solana flip Ethereum?",            side: "SELL",price: 0.12, outcome: "NO",  pnl: "+$2,100" },
-    ]},
-  { address: "0x5d4f...8a1b", tier: 2, win_rate: 0.72, total_pnl: 84100, total_trades: 441, best_category: "politics", signal_weight: 0.75, active: true,
-    recent: [
-      { market: "ECB cut rates June 2025?",         side: "BUY", price: 0.63, outcome: "PENDING", pnl: "—" },
-      { market: "UK snap election called?",         side: "BUY", price: 0.31, outcome: "NO",  pnl: "-$840" },
-      { market: "Macron resign in 2025?",           side: "SELL",price: 0.08, outcome: "NO",  pnl: "+$1,450" },
-    ]},
-  { address: "0x2e9c...f6d4", tier: 2, win_rate: 0.71, total_pnl: 71300, total_trades: 382, best_category: "macro", signal_weight: 0.75, active: false,
-    recent: [
-      { market: "Gold hit $3500 before July?",      side: "BUY", price: 0.31, outcome: "PENDING", pnl: "—" },
-      { market: "US enter recession 2025?",         side: "SELL",price: 0.22, outcome: "NO",  pnl: "+$3,200" },
-      { market: "BoJ raise rates again?",           side: "BUY", price: 0.67, outcome: "YES", pnl: "+$1,880" },
-    ]},
-  { address: "0x8b7a...3c9f", tier: 2, win_rate: 0.69, total_pnl: 58200, total_trades: 298, best_category: "crypto", signal_weight: 0.75, active: true,
-    recent: [
-      { market: "BTC exceed $100K end of April?",   side: "BUY", price: 0.38, outcome: "PENDING", pnl: "—" },
-      { market: "Coinbase added to S&P 500?",       side: "BUY", price: 0.44, outcome: "NO",  pnl: "-$620" },
-      { market: "SEC approve spot ETH ETF options?",side: "BUY", price: 0.71, outcome: "YES", pnl: "+$2,340" },
-    ]},
-  { address: "0x1f3d...7e2a", tier: 3, win_rate: 0.67, total_pnl: 41800, total_trades: 189, best_category: "other", signal_weight: 0.5, active: false,
-    recent: [
-      { market: "Apple Vision Pro 2 at WWDC?",      side: "BUY", price: 0.41, outcome: "YES", pnl: "+$1,560" },
-      { market: "SpaceX Starship reach orbit?",     side: "BUY", price: 0.29, outcome: "YES", pnl: "+$3,340" },
-      { market: "Nvidia beat Q1 EPS?",              side: "BUY", price: 0.71, outcome: "PENDING", pnl: "—" },
-    ]},
-  { address: "0x4c8e...b5f1", tier: 3, win_rate: 0.65, total_pnl: 34600, total_trades: 224, best_category: "macro", signal_weight: 0.5, active: true,
-    recent: [
-      { market: "Meta Q2 revenue beat consensus?",  side: "BUY", price: 0.57, outcome: "PENDING", pnl: "—" },
-      { market: "BoE cut rates in May?",            side: "BUY", price: 0.48, outcome: "YES", pnl: "+$880" },
-      { market: "Oil hit $100 before July?",        side: "SELL",price: 0.18, outcome: "NO",  pnl: "+$1,100" },
-    ]},
+  { address: "0x24c8cf69a0e0a17eee21f69d29752bfa32e823e1", name: "debased",      tier: 1, win_rate: 0.74, total_pnl: 843100, total_trades: 399,  best_category: "macro",    signal_weight: 1.0,  active: true,  recent: [] },
+  { address: "0x6bab41a0dc40d6dd4c1a915b8c01969479fd1292", name: "Dropper",      tier: 1, win_rate: 0.72, total_pnl: 316900, total_trades: 156,  best_category: "politics", signal_weight: 1.0,  active: true,  recent: [] },
+  { address: "0x000d257d2dc7616feaef4ae0f14600fdf50a758e", name: "scottilicious", tier: 1, win_rate: 0.82, total_pnl: 174300, total_trades: 150,  best_category: "crypto",   signal_weight: 1.0,  active: true,  recent: [] },
+  { address: "0x06dcaa14f57d8a0573f5dc5940565e6de667af59", name: "Big.Chungus",  tier: 1, win_rate: 0.70, total_pnl: 104200, total_trades: 245,  best_category: "other",    signal_weight: 1.0,  active: true,  recent: [] },
+  { address: "0x011f2d377e56119fb09196dffb0948ae55711122", name: "11122",         tier: 2, win_rate: 0.63, total_pnl: 244500, total_trades: 699,  best_category: "politics", signal_weight: 0.75, active: false, recent: [] },
+  { address: "0xd5ccdf772f795547e299de57f47966e24de8dea4", name: "tsybka",        tier: 2, win_rate: 0.86, total_pnl: 78200,  total_trades: 155,  best_category: "macro",    signal_weight: 0.75, active: true,  recent: [] },
+  { address: "0x751a2b86cab503496efd325c8344e10159349ea1", name: "Sharky6999",   tier: 2, win_rate: 0.98, total_pnl: 31300,  total_trades: 2750, best_category: "crypto",   signal_weight: 0.75, active: true,  recent: [] },
+  { address: "0x2a019dc0089ea8c6edbbafc8a7cc9ba77b4b6397", name: "aviato",       tier: 2, win_rate: 0.91, total_pnl: 29800,  total_trades: 288,  best_category: "politics", signal_weight: 0.75, active: true,  recent: [] },
 ];
 
 const fmt$   = n => `${n<0?"-":""}$${Math.abs(n).toLocaleString("en-US",{minimumFractionDigits:2,maximumFractionDigits:2})}`;
@@ -101,7 +61,7 @@ function WhaleCard({w}) {
     <div style={{padding:"4px 6px",border:"1px solid #0c1c28",borderRadius:3,marginBottom:3,background:"#080b0e"}}>
       <div style={{display:"flex",alignItems:"center",gap:4,marginBottom:2}}>
         <div style={{width:5,height:5,borderRadius:"50%",flexShrink:0,background:w.active?"#00ff8c":"#1e3040",boxShadow:w.active?"0 0 4px #00ff8c":"none"}}/>
-        <span style={{fontSize:7,color:"#7ab0c8",flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{w.address}</span>
+        <span style={{fontSize:7,color:"#7ab0c8",flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{w.name || w.address.slice(0,8)+"..."+w.address.slice(-4)}</span>
         <TierBadge tier={w.tier}/>
         <CatBadge cat={w.best_category}/>
       </div>
