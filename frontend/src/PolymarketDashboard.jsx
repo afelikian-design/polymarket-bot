@@ -693,7 +693,7 @@ export default function Dashboard() {
                     </td>
                     <td style={{padding:"8px",color:"#c8d8e0",whiteSpace:"nowrap"}}>{p.entry_price?.toFixed(3)}</td>
                     <td style={{padding:"8px",whiteSpace:"nowrap"}}>{ p.question?.includes("[COPY") ? (p.thesis?.includes("BUY") ? <span style={{color:"#4ab8c8",borderBottom:"1px solid #4ab8c860"}}>{p.yes_price?.toFixed(3)}</span> : <span style={{color:"#4a6070"}}>{p.yes_price?.toFixed(3)}</span>) : <span style={{color:"#4a6070"}}>{p.yes_price?.toFixed(3)}</span>}</td>
-                    <td style={{padding:"8px",whiteSpace:"nowrap"}}>{ p.question?.includes("[COPY") ? (p.thesis?.includes("SELL") ? <span style={{color:"#00c87a",borderBottom:"1px solid #00c87a60"}}>{p.no_price?.toFixed(3)}</span> : <span style={{color:"#4a6070"}}>{p.no_price?.toFixed(3)}</span>) : <span style={{color:"#00c87a",borderBottom:"1px solid #00c87a60"}}>{p.no_price?.toFixed(3)}</span>}</td>
+                    <td style={{padding:"8px",whiteSpace:"nowrap"}}>{ p.question?.includes("[COPY") ? (p.thesis?.includes("SELL") ? <span style={{color:"#b060ff",borderBottom:"1px solid #b060ff60"}}>{p.no_price?.toFixed(3)}</span> : <span style={{color:"#4a6070"}}>{p.no_price?.toFixed(3)}</span>) : <span style={{color:"#b060ff",borderBottom:"1px solid #b060ff60"}}>{p.no_price?.toFixed(3)}</span>}</td>
                     <td style={{padding:"8px",color:p.current_price>p.entry_price?"#00a858":"#ff4455",whiteSpace:"nowrap"}}>{p.current_price?.toFixed(3)}</td>
                     <td style={{padding:"8px",color:"#f0c070",whiteSpace:"nowrap"}}>{fmtPct(p.our_probability||0)}</td>
                     <td style={{padding:"8px",color:"#fff",whiteSpace:"nowrap"}}>{fmt$(p.size_usd||0)}</td>
