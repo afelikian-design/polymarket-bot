@@ -349,7 +349,10 @@ export default function Dashboard() {
                 <div className="mob-card">
                   <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
                     <span style={{fontSize:10,color:"#8ab8c8",letterSpacing:".14em"}}>STRATEGY INTELLIGENCE</span>
-                    {insights.analyzed_at&&<span style={{fontSize:9,color:"#243848"}}>{new Date(insights.analyzed_at).toLocaleTimeString("en-US",{timeZone:"America/Los_Angeles",hour:"2-digit",minute:"2-digit"})}</span>}
+                    <div style={{textAlign:"right"}}>
+                      {insights.analyzed_at&&<div style={{fontSize:7,color:"#4a6070"}}>{new Date(insights.analyzed_at).toLocaleTimeString("en-US",{timeZone:"America/Los_Angeles",hour:"2-digit",minute:"2-digit"})}</div>}
+                      {insights.analyzed_at&&<div style={{fontSize:7,color:"#304858"}}>Next: {new Date(new Date(insights.analyzed_at).getTime()+12*60*60*1000).toLocaleTimeString("en-US",{timeZone:"America/Los_Angeles",hour:"2-digit",minute:"2-digit"})}</div>}
+                    </div>
                   </div>
                   <div style={{fontSize:10,color:"#8ab8c8",lineHeight:1.5,marginBottom:8}}>{insights.summary}</div>
                   {(insights.warnings||[]).map((w,i)=>(
