@@ -677,7 +677,7 @@ export default function Dashboard() {
             {desktopTab==="positions"&&(POSITIONS.length===0?<div style={{padding:"40px",textAlign:"center",color:"#8ab8c8",fontSize:11}}>No open positions yet</div>:(
               <table style={{width:"100%",borderCollapse:"collapse",fontSize:9}}>
                 <thead style={{background:"#070a0d",position:"sticky",top:0}}>
-                  <tr>{["MARKET","ENTRY","YES","NO","EST.","SIZE","HELD","EXPIRES","UNRLZD"].map(h=>(<th key={h} style={{padding:"6px 8px",textAlign:"left",color:"#8ab8c8",fontSize:7,letterSpacing:".12em",fontWeight:400,borderBottom:"1px solid #0c1c28",whiteSpace:"nowrap"}}>{h}</th>))}</tr>
+                  <tr>{["MARKET","ENTRY","YES","NO","EST.","SIZE","HELD","EXPIRES","UNRLZD","%",""].map(h=>(<th key={h} style={{padding:"6px 8px",textAlign:"left",color:"#8ab8c8",fontSize:7,letterSpacing:".12em",fontWeight:400,borderBottom:"1px solid #0c1c28",whiteSpace:"nowrap"}}>{h}</th>))}</tr>
                 </thead>
                 <tbody>{POSITIONS.map((p,i)=>{
                   const noPrice = p.current_price!=null?(1-p.current_price).toFixed(3):"—";
