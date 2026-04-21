@@ -92,17 +92,30 @@ def run_exit_monitor(db, portfolio):
                         # If NO won, price goes to 1.0. If YES won, price goes to 0.0
                         exit_price = no_price if no_price is not None else pos.current_price
 
-                # Take profit if NO price > 0.92 (near certainty)
-                if not should_close and pos.current_price >= 0.92:
-                    should_close = True
-                    exit_reason = "TAKE_PROFIT"
-                    exit_price = pos.current_price
+                is_copy = condition_id.startswith("COPY-")
 
-                # Stop loss if NO price drops below 0.25 (YES winning)
-                if not should_close and pos.current_price <= 0.25 and hours_held > 2:
-                    should_close = True
-                    exit_reason = "STOP_LOSS"
-                    exit_price = pos.current_price
+                if is_copy:
+                    # Copy trades follow YES — take profit when YES hits 0.85+
+                    if not should_close and pos.current_price >= 0.85:
+                        should_close = True
+                        exit_reason = "TAKE_PROFIT"
+                        exit_price = pos.current_price
+                    # Stop loss when YES drops below 0.15
+                    if not should_close and pos.current_price <= 0.15 and hours_held > 2:
+                        should_close = True
+                        exit_reason = "STOP_LOSS"
+                        exit_price = pos.current_price
+                else:
+                    # NO bot trades — take profit when NO price > 0.92
+                    if not should_close and pos.current_price >= 0.92:
+                        should_close = True
+                        exit_reason = "TAKE_PROFIT"
+                        exit_price = pos.current_price
+                    # Stop loss if NO price drops below 0.25 (YES winning)
+                    if not should_close and pos.current_price <= 0.25 and hours_held > 2:
+                        should_close = True
+                        exit_reason = "STOP_LOSS"
+                        exit_price = pos.current_price
 
                 if should_close:
                     shares = pos.size_usd / pos.entry_price if pos.entry_price > 0 else 0
