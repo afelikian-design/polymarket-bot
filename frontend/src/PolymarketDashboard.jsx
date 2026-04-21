@@ -591,7 +591,7 @@ export default function Dashboard() {
         {/* LEFT PANEL */}
         <div style={{background:"#070a0d",borderRight:"1px solid #0c1c28",padding:"14px 11px",overflowY:"auto",display:"flex",flexDirection:"column",gap:7}}>
           <div style={{fontSize:8,color:"#8ab8c8",letterSpacing:".2em",marginBottom:4}}>AGENTS</div>
-          {Object.entries(agentData).filter(([name])=>["no_bot","binance_bot"].includes(name)).map(([name,a])=>(
+          {Object.entries(agentData).filter(([name])=>["no_bot","binance_bot","exit_monitor"].includes(name)).map(([name,a])=>(
             <div key={name} style={{padding:"4px 8px",borderBottom:"1px solid #0a0c10",display:"flex",alignItems:"center",gap:6}}>
               <div style={{width:5,height:5,borderRadius:"50%",flexShrink:0,background:a.status==="running"?"#00ff8c":a.status==="error"?"#ff4455":"#304858",boxShadow:a.status==="running"?"0 0 4px #00ff8c":"none"}} className={a.status==="running"?"pulse":""}/>
               <div style={{flex:1,minWidth:0}}>

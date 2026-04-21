@@ -86,7 +86,7 @@ def get_trades():
 @app.route("/api/agents")
 def get_agents():
     result = {}
-    for agent in ["no_bot","binance_bot"]:
+    for agent in ["no_bot","binance_bot","exit_monitor"]:
         latest = db.query(AgentLog).filter_by(agent=agent)\
             .order_by(AgentLog.logged_at.desc()).first()
         result[agent] = {
