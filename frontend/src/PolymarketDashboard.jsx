@@ -265,7 +265,7 @@ export default function Dashboard() {
                 <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
                   <span style={{fontSize:10,color:"#8ab8c8",letterSpacing:".14em"}}>PORTFOLIO</span>
                   <div style={{display:"flex",alignItems:"center",gap:6}}>
-                    <span style={{fontSize:12,color:pd>=0?"#00ff8c":"#ff4455",fontWeight:500}}>{sign(pd)}{fmt$(pd)}</span>
+                    <span style={{fontSize:12,color:(portfolio.open_pnl||0)>=0?"#00ff8c":"#ff4455",fontWeight:500}}>{sign(portfolio.open_pnl||0)}{fmt$(Math.abs(portfolio.open_pnl||0))}</span>
                     <button onClick={()=>setShowRealized(r=>!r)} style={{fontSize:7,padding:"2px 6px",borderRadius:3,background:showRealized?"#0a1e14":"#0a0d12",border:showRealized?"1px solid #00ff8c44":"1px solid #1a2a38",color:showRealized?"#00ff8c":"#4a6070",cursor:"pointer"}}>{showRealized?"REALIZED":"TOTAL"}</button>
                   </div>
                 </div>
@@ -615,8 +615,8 @@ export default function Dashboard() {
                 </div>
               </div>
               <div style={{display:"flex",gap:14,alignItems:"center"}}>
-                <span style={{fontSize:12,color:pd>=0?"#00ff8c":"#ff4455",fontWeight:500}}>{sign(pd)}{fmt$(pd)}</span>
-                <span style={{fontSize:11,color:"#c8d8e0"}}>{sign(pd)}{((pd/p0)*100).toFixed(2)}%</span>
+                <span style={{fontSize:12,color:(portfolio.open_pnl||0)>=0?"#00ff8c":"#ff4455",fontWeight:500}}>{sign(portfolio.open_pnl||0)}{fmt$(Math.abs(portfolio.open_pnl||0))}</span>
+                <span style={{fontSize:11,color:"#c8d8e0"}}>{sign(portfolio.open_pnl||0)}{(((portfolio.open_pnl||0)/1000)*100).toFixed(2)}%</span>
                 <button onClick={()=>setShowRealized(r=>!r)} style={{fontSize:8,padding:"2px 8px",borderRadius:3,background:showRealized?"#0a1e14":"#0a0d12",border:showRealized?"1px solid #00ff8c44":"1px solid #1a2a38",color:showRealized?"#00ff8c":"#4a6070",cursor:"pointer"}}>{showRealized?"REALIZED":"TOTAL"}</button>
               </div>
             </div>
