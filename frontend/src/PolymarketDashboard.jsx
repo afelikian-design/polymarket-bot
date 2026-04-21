@@ -124,7 +124,7 @@ export default function Dashboard() {
   useEffect(()=>{
     const fetchData = async () => {
       try {
-        const [port,pos,trd,agt,queue,snaps,insights,catStats] = await Promise.all([
+        const [port,pos,trd,agt,queue,snaps,insights,catStats,wt] = await Promise.all([
           fetch(`${API_BASE}/api/portfolio`).then(r=>r.json()),
           fetch(`${API_BASE}/api/positions`).then(r=>r.json()),
           fetch(`${API_BASE}/api/trades`).then(r=>r.json()),
@@ -133,8 +133,10 @@ export default function Dashboard() {
           fetch(`${API_BASE}/api/snapshots`).then(r=>r.json()),
           fetch(`${API_BASE}/api/insights`).then(r=>r.json()).catch(()=>null),
           fetch(`${API_BASE}/api/category_stats`).then(r=>r.json()).catch(()=>[]),
+          fetch(`${API_BASE}/api/whale_trades`).then(r=>r.json()).catch(()=>[]),
         ]);
         setPortfolio(port); setPositions(pos); setTrades(trd); setAgentData(agt); setQueue(queue);
+        if(wt) setWhaleTrades(wt);
         if(snaps && snaps.length > 0){
           setAllSnaps(snaps);
           const tf = TIMEFRAMES[tfIdxRef.current];
