@@ -589,6 +589,8 @@ export default function Dashboard() {
                   <span style={{fontSize:6,color:"#f0c070",flexShrink:0,fontWeight:600}}>{t.name}</span>
                   <span style={{fontSize:6,color:"#4a7080",flexShrink:0}}>${(Number(t.size)||0).toFixed(0)}</span>
                   <span style={{fontSize:6,color:"#4a7080",flexShrink:0}}>@{(Number(t.price)||0).toFixed(3)}</span>
+                  <span style={{fontSize:6,color:"#304858",flexShrink:0,marginLeft:"auto"}}>{t.timestamp?new Date(Number(t.timestamp)*1000).toLocaleDateString([],{month:"short",day:"numeric",hour:"2-digit",minute:"2-digit"}):"—"}</span>
+                  <span style={{fontSize:6,color:"#304858",flexShrink:0,marginLeft:"auto"}}>{t.timestamp?new Date(Number(t.timestamp)*1000).toLocaleDateString([],{month:"short",day:"numeric",hour:"2-digit",minute:"2-digit"}):"—"}</span>
                 </div>
                 <div style={{fontSize:6,color:"#c8d8e0",paddingLeft:4,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{t.market}</div>
               </div>
