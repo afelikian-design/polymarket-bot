@@ -124,6 +124,16 @@ def run_copy_bot(db, portfolio):
             if existing:
                 seen_activity.add(act_key)
                 continue
+            # Check for duplicate by question
+            dup_q = "[COPY:{}]".format(name)
+            dup = db.query(Position).filter(
+                Position.question.like("%{}%".format(dup_q)),
+                Position.question.like("%{}%".format(question[:30])),
+                Position.status == "OPEN"
+            ).first()
+            if dup:
+                seen_activity.add(act_key)
+                continue
 
             balance = portfolio.get_balance()
             copy_size = round(balance * 0.03 * weight, 2)
