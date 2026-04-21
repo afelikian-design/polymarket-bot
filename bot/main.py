@@ -759,28 +759,27 @@ def main():
     api_thread.start()
     logger.info("API running on port {}".format(Config.API_PORT))
 
-    log_agent("scanner", "idle", "Bot started")
-    log_agent("brain", "idle", "Bot started")
-    log_agent("executor", "idle", "Bot started")
-    log_agent("exit_monitor", "idle", "Bot started")
-    log_agent("whale_monitor", "idle", "Bot started")
+    log_agent("no_bot", "idle", "Bot started")
+    log_agent("binance_bot", "idle", "Bot started")
 
     log_activity("scanner", "SCANNING",
         "PolyBot started in {} mode".format("PAPER" if Config.PAPER_TRADING else "LIVE"),
         detail="Model: {} | Initial balance: ${}".format(Config.CLAUDE_MODEL, INITIAL_BALANCE))
 
-    logger.info("Running initial scan...")
-    run_scanner()
-    run_brain()
-    run_executor()
+    from no_bot import run_no_bot
+    from binance_bot import run_binance_bot
 
-    schedule.every(Config.SCAN_INTERVAL_SEC).seconds.do(run_scanner)
-    schedule.every(Config.BRAIN_INTERVAL_SEC).seconds.do(run_brain)
-    schedule.every(Config.BRAIN_INTERVAL_SEC).seconds.do(run_executor)
-    schedule.every(Config.EXIT_CHECK_SEC).seconds.do(run_exit_monitor)
+    log_agent("no_bot", "idle", "NO Bot started")
+    log_agent("binance_bot", "idle", "Binance Bot started")
+
+    logger.info("Old agents PAUSED. Running NO Bot and Binance Bot only.")
+
+    run_no_bot(db, portfolio)
+    run_binance_bot(db, portfolio)
+
+    schedule.every(15).minutes.do(run_no_bot, db, portfolio)
+    schedule.every(1).minutes.do(run_binance_bot, db, portfolio)
     schedule.every(5).minutes.do(portfolio.snapshot)
-    schedule.every(60).minutes.do(run_whale_monitor)
-    schedule.every(30).minutes.do(run_strategy_analyzer)
 
     logger.info("All agents scheduled. Bot running 24/7.")
 
