@@ -58,7 +58,7 @@ const CatBadge = ({cat}) => (
 
 function WhaleCard({w}) {
   return (
-    <div style={{padding:"3px 6px",borderBottom:"1px solid #0a0c10"}}>
+    <div style={{padding:"3px 6px",border:"1px solid #0c1e2a",borderRadius:3,marginBottom:2,background:"#080b0e"}}>
       <div style={{display:"flex",alignItems:"center",gap:4}}>
         <div style={{width:4,height:4,borderRadius:"50%",flexShrink:0,background:w.active?"#00ff8c":"#1e3040",boxShadow:w.active?"0 0 3px #00ff8c":"none"}}/>
         <span style={{fontSize:7,color:"#c8d8e0",fontWeight:600,flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{w.name||w.address.slice(0,8)}</span>
