@@ -11,6 +11,13 @@ class Config:
     CHAIN_ID            = 137
 
     PAPER_TRADING       = os.getenv("PAPER_TRADING", "true").lower() == "true"
+    SCANNER_ENABLED     = False
+    BRAIN_ENABLED       = False
+    EXECUTOR_ENABLED    = False
+    EXIT_MONITOR_ENABLED = False
+    WHALE_MONITOR_ENABLED = False
+    NO_BOT_ENABLED      = True
+    BINANCE_BOT_ENABLED = True
     SCAN_INTERVAL_SEC   = 900
     BRAIN_INTERVAL_SEC  = 600
     EXIT_CHECK_SEC      = 60
@@ -33,7 +40,7 @@ class Config:
     MAX_VOLUME          = 400000
 
     CLAUDE_MODEL        = "claude-sonnet-4-6"
-    MIN_CONFIDENCE      = 75
+    MIN_CONFIDENCE      = 65
     CONSENSUS_THRESHOLD = 2
 
     TARGET_CAPTURE      = 0.60
