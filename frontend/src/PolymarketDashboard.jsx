@@ -684,7 +684,8 @@ export default function Dashboard() {
                       <div>{p.question}</div>
                       {p.thesis&&<div style={{fontSize:7,color:"#4a7080",marginTop:3,lineHeight:1.4,fontStyle:"italic"}}>"{p.thesis}"</div>}
                     </td>
-                    <td style={{padding:"8px",color:"#c8d8e0",whiteSpace:"nowrap"}}>{p.entry_price?.toFixed(3)}</td>
+                    <td style={{padding:"8px",color:"#c8d8e0",whiteSpace:"nowrap"}}>{p.no_price?.toFixed(3)}</td>
+                    <td style={{padding:"8px",color:"#c8d8e0",whiteSpace:"nowrap"}}>{p.yes_price?.toFixed(3)}</td>
                     <td style={{padding:"8px",color:p.current_price>p.entry_price?"#00a858":"#ff4455",whiteSpace:"nowrap"}}>{p.current_price?.toFixed(3)}</td>
                     <td style={{padding:"8px",color:"#607888",whiteSpace:"nowrap"}}>{noPrice}</td>
                     <td style={{padding:"8px",color:"#f0c070",whiteSpace:"nowrap"}}>{fmtPct(p.our_probability||0)}</td>

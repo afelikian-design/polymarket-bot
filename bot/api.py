@@ -60,6 +60,8 @@ def get_positions():
         "expected_gap":   p.expected_gap,
         "thesis":         p.thesis,
         "opened_at":      p.opened_at.isoformat() if p.opened_at else None,
+        "no_price":       p.entry_price,
+        "yes_price":      round(1 - p.current_price, 4),
         "unrealized_pnl": round(
             (p.current_price - p.entry_price) * (p.size_usd / p.entry_price), 2
         ) if p.entry_price > 0 else 0
