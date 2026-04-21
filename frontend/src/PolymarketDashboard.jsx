@@ -486,6 +486,20 @@ export default function Dashboard() {
               {WHALES.map((w,i)=>(
                 <WhaleCard key={i} w={w} expanded={expandedWhale===i} onToggle={()=>setExpandedWhale(expandedWhale===i?null:i)}/>
               ))}
+              <div style={{marginTop:16,marginBottom:6,fontSize:9,color:"#8ab8c8",letterSpacing:".18em"}}>RECENT WHALE TRADES · LIVE</div>
+              {whaleTrades.slice(0,20).map((t,i)=>(
+                <div key={i} style={{padding:"6px 0",borderBottom:"1px solid #0a0c10"}}>
+                  <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:2}}>
+                    <span style={{fontSize:8,padding:"1px 5px",borderRadius:2,background:t.side==="BUY"?"#002010":"#200010",color:t.side==="BUY"?"#00a858":"#ff4455",fontWeight:600}}>{t.side}</span>
+                    <span style={{fontSize:8,color:"#f0c070",fontWeight:600}}>{t.name}</span>
+                    <span style={{fontSize:8,color:"#4a7080"}}>${(Number(t.size)||0).toFixed(0)}</span>
+                    <span style={{fontSize:8,color:"#4a7080"}}>@{(Number(t.price)||0).toFixed(3)}</span>
+                    <span style={{fontSize:7,color:"#304858",marginLeft:"auto"}}>{t.timestamp?new Date(Number(t.timestamp)*1000).toLocaleDateString([],{month:"short",day:"numeric",hour:"2-digit",minute:"2-digit"}):"—"}</span>
+                  </div>
+                  <div style={{fontSize:8,color:"#c8d8e0",paddingLeft:4,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{t.market}</div>
+                </div>
+              ))}
+              {whaleTrades.length===0&&<div style={{fontSize:8,color:"#304858",padding:"8px 0"}}>Loading live trades...</div>}
             </div>
           )}
         </div>
