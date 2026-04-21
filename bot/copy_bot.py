@@ -125,8 +125,8 @@ def run_copy_bot(db, portfolio):
 
             question = p.get('title') or p.get('question', 'Unknown market')
             size = float(p.get('currentValue') or p.get('size') or 0)
-            if size < 100:
-                continue  # Only copy trades >$100
+            if size < 50:
+                continue  # Only copy trades >$50
 
             price = get_market_price(cid)
             existing = db.query(Position).filter_by(id='COPY-' + cid, status='OPEN').first()
