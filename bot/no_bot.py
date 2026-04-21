@@ -98,7 +98,8 @@ def run_no_bot(db, portfolio):
                 thesis="NO Bot: 73% base rate. YES={:.3f} NO={:.3f} Vol=${:,.0f}".format(
                     c["yes_price"], no_price, c["volume"]),
                 status="OPEN",
-                category=cat
+                category=cat,
+                expires_at=c.get("end_date")
             )
             db.merge(position)
             trade = Trade(

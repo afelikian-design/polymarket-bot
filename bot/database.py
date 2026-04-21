@@ -23,6 +23,7 @@ class Position(Base):
     opened_at       = Column(DateTime, default=datetime.utcnow)
     closed_at       = Column(DateTime)
     category        = Column(String)
+    expires_at      = Column(String)
 
 class Trade(Base):
     __tablename__ = "trades"

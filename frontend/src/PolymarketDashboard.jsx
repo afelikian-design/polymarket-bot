@@ -678,7 +678,7 @@ export default function Dashboard() {
                 <tbody>{POSITIONS.map((p,i)=>{
                   const noPrice = p.current_price!=null?(1-p.current_price).toFixed(3):"—";
                   const heldHrs = p.opened_at?((Date.now()-new Date(p.opened_at+"Z").getTime())/3600000).toFixed(1)+"h":"—";
-                  const expires = p.closes_at?new Date(p.closes_at).toLocaleDateString([],{month:"short",day:"numeric",hour:"2-digit",minute:"2-digit"}):"—";
+                  const expires = p.expires_at?new Date(p.expires_at).toLocaleDateString([],{month:"short",day:"numeric",hour:"2-digit",minute:"2-digit"}):"—";
                   return(<tr key={i} className="rh" style={{borderBottom:"1px solid #07080b"}}>
                     <td style={{padding:"8px",color:"#fff",maxWidth:260,fontSize:9,lineHeight:1.4,wordBreak:"break-word"}}>
                       <div>{p.question}</div>

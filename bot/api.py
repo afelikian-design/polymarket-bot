@@ -61,6 +61,7 @@ def get_positions():
         "thesis":         p.thesis,
         "opened_at":      p.opened_at.isoformat() if p.opened_at else None,
         "no_price":       p.entry_price,
+        "expires_at":     p.expires_at if hasattr(p, "expires_at") else None,
         "yes_price":      round(1 - p.current_price, 4),
         "unrealized_pnl": round(
             (p.current_price - p.entry_price) * (p.size_usd / p.entry_price), 2
