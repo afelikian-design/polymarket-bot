@@ -25,7 +25,7 @@ class Config:
 
     MAX_KELLY_FRACTION  = 0.10
     MIN_KELLY_FRACTION  = 0.01
-    MAX_OPEN_POSITIONS       = 25
+    MAX_OPEN_POSITIONS       = 20
     MAX_POSITION_PCT    = 0.15
     MIN_LIQUIDITY       = 2000
     MIN_PRICE           = 0.05
