@@ -228,45 +228,42 @@ def close_position(condition_id):
 
 @app.route("/api/category_stats")
 def get_category_stats():
-    closed = db.query(Position).filter_by(status="CLOSED").all()
-    
-    categories = {
-        "CRYPTO":   {"keywords": ["crypto","btc","eth","sol","bitcoin","ethereum","solana","binance","usdc","token","xrp","bnb","up or down","hyperliquid","hype"], "wins":0,"losses":0,"pnl":0},
-        "SPORTS":   {"keywords": ["ufc","nfl","nba","nhl","mlb","soccer","football","basketball","blazers","spurs","lakers","celtics","warriors","knicks","bulls","heat","nets","vs.","fight","match","o/u","over","under","rebounds","points","goals","innings","cardinals","marlins","hawks","bruins","sabres","magic","pistons","trail"], "wins":0,"losses":0,"pnl":0},
-        "POLITICS": {"keywords": ["trump","biden","senate","congress","election","president","democrat","republican","vote","poll","iran","diplomatic","tariff","sanctions","treaty","prime minister","chancellor","minister","starmer","musk"], "wins":0,"losses":0,"pnl":0},
-        "MACRO":    {"keywords": ["fed","rate","cpi","gdp","inflation","interest","recession","treasury","bond","dollar","trade","strait","hormuz","ships","transit","oil","barrel","opec","currency","yuan","euro","yen","gold","silver"], "wins":0,"losses":0,"pnl":0},
-        "ESPORTS":  {"keywords": ["valorant","dota","csgo","lol:","league of legends","esport","gaming","gen.g","nongshim","bo3","bo5","lck","lcs","lec","fnatic","t1","c9","mobile legends","mlbb","mpl"], "wins":0,"losses":0,"pnl":0},
-    }
-    
+    open_pos = db.query(Position).filter_by(status='OPEN').all()
+    exposure = {}
+    for p in open_pos:
+        cat = (p.category or 'OTHER') if hasattr(p, 'category') else 'OTHER'
+        if cat not in exposure:
+            exposure[cat] = {"count": 0, "size_usd": 0}
+        exposure[cat]["count"] += 1
+        exposure[cat]["size_usd"] += (p.size_usd or 0)
+    closed = db.query(Position).filter_by(status='CLOSED').all()
+    history = {}
     for p in closed:
-        q = (p.question or "").lower()
-        matched = False
-        for cat, data in categories.items():
-            if any(k in q for k in data["keywords"]):
-                if (p.pnl or 0) > 0:
-                    data["wins"] += 1
-                else:
-                    data["losses"] += 1
-                data["pnl"] += (p.pnl or 0)
-                matched = True
-                break
-        if not matched:
-            categories["MACRO"]["losses"] += 1
-
+        cat = (p.category or 'OTHER') if hasattr(p, 'category') else 'OTHER'
+        if cat not in history:
+            history[cat] = {"wins": 0, "losses": 0, "pnl": 0}
+        if (p.pnl or 0) > 0:
+            history[cat]["wins"] += 1
+        else:
+            history[cat]["losses"] += 1
+        history[cat]["pnl"] += (p.pnl or 0)
     result = []
-    for cat, data in categories.items():
-        total = data["wins"] + data["losses"]
+    all_cats = set(list(exposure.keys()) + list(history.keys()))
+    for cat in all_cats:
+        exp = exposure.get(cat, {"count": 0, "size_usd": 0})
+        hist = history.get(cat, {"wins": 0, "losses": 0, "pnl": 0})
+        total = hist['wins'] + hist['losses']
         result.append({
             "category": cat,
-            "win_rate": round(data["wins"] / total, 3) if total > 0 else 0,
+            "open_count": exp["count"],
+            "open_size_usd": round(exp["size_usd"], 2),
+            "win_rate": round(hist["wins"] / total, 3) if total > 0 else 0,
             "total": total,
-            "wins": data["wins"],
-            "pnl": round(data["pnl"], 2),
+            "wins": hist["wins"],
+            "pnl": round(hist["pnl"], 2),
         })
     return jsonify(result)
 
-if __name__ == "__main__":
-    app.run(host=Config.API_HOST, port=Config.API_PORT, debug=False)
 @app.route("/api/activity")
 def get_activity():
     logs = db.query(ActivityLog)\

@@ -50,4 +50,4 @@ class Config:
 
     API_HOST            = "0.0.0.0"
     API_PORT            = 5000
-    DB_PATH             = "bot.db"
+    DB_PATH             = "/root/polymarket-bot/bot/bot.db"

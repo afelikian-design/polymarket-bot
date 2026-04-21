@@ -22,6 +22,7 @@ class Position(Base):
     pnl             = Column(Float, default=0.0)
     opened_at       = Column(DateTime, default=datetime.utcnow)
     closed_at       = Column(DateTime)
+    category        = Column(String)
 
 class Trade(Base):
     __tablename__ = "trades"

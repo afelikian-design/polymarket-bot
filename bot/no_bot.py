@@ -73,6 +73,19 @@ def run_no_bot(db, portfolio):
             if size < 10:
                 continue
             no_price = c["no_price"]
+            q = c["question"].lower()
+            if any(k in q for k in ["trump","biden","election","president","senate","congress","vote","iran","tariff","minister","musk","democrat","republican","greenland","cuba","venezuela","ukraine","russia","china","israel","war","military","sanctions"]):
+                cat = "POLITICS"
+            elif any(k in q for k in ["btc","eth","sol","bitcoin","ethereum","solana","crypto","xrp","token","binance","hyperliquid"]):
+                cat = "CRYPTO"
+            elif any(k in q for k in ["fed","rate","cpi","gdp","inflation","recession","treasury","oil","gold","dollar","opec"]):
+                cat = "MACRO"
+            elif any(k in q for k in ["lol:","valorant","csgo","dota","esport","lck","lcs","lec","bo3","bo5","t1","fnatic","c9"]):
+                cat = "ESPORTS"
+            elif any(k in q for k in ["ufc","nfl","nba","nhl","mlb","soccer","football","basketball","vs.","match","goals","innings","tennis","open","championship"]):
+                cat = "SPORTS"
+            else:
+                cat = "OTHER"
             position = Position(
                 id=condition_id,
                 question=c["question"],
@@ -84,7 +97,8 @@ def run_no_bot(db, portfolio):
                 kelly_fraction=0.05,
                 thesis="NO Bot: 73% base rate. YES={:.3f} NO={:.3f} Vol=${:,.0f}".format(
                     c["yes_price"], no_price, c["volume"]),
-                status="OPEN"
+                status="OPEN",
+                category=cat
             )
             db.merge(position)
             trade = Trade(
