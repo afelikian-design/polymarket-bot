@@ -143,9 +143,8 @@ export default function Dashboard() {
   const [TRADES, setTrades]       = useState([]);
   const [QUEUE, setQueue]         = useState([]);
   const [agentData, setAgentData] = useState({
-    scanner:{status:"idle",message:"Starting..."},brain:{status:"idle",message:"Starting..."},
-    executor:{status:"idle",message:"Starting..."},exit_monitor:{status:"idle",message:"Starting..."},
-    whale_monitor:{status:"idle",message:"Starting..."},
+    no_bot:{status:"idle",message:"Starting..."},
+    binance_bot:{status:"idle",message:"Starting..."},
   });
   const [activity, setActivity]   = useState([]);
   const [insights, setInsights]   = useState(null);
