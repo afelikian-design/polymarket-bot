@@ -130,6 +130,16 @@ def run_copy_bot(db, portfolio):
             if copy_size < 10:
                 continue
 
+            # Try to get expiry from Gamma API
+            end_date = None
+            try:
+                gr = requests.get("https://gamma-api.polymarket.com/markets", params={"conditionId": cid}, timeout=8)
+                if gr.status_code == 200:
+                    gd = gr.json()
+                    if isinstance(gd, list) and gd:
+                        end_date = gd[0].get("endDate") or gd[0].get("endDateIso")
+            except Exception:
+                pass
             position = Position(
                 id=pos_id,
                 question="[COPY:{}] {}".format(name, question[:60]),
@@ -141,7 +151,8 @@ def run_copy_bot(db, portfolio):
                 kelly_fraction=0.03,
                 thesis="Copying {} | {} ${:.0f} @ {:.3f}".format(name, side, size, price),
                 status="OPEN",
-                category="COPY"
+                category="COPY",
+                expires_at=end_date
             )
             db.merge(position)
             trade = Trade(
