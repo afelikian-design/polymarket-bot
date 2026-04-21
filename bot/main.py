@@ -769,6 +769,7 @@ def main():
     from no_bot import run_no_bot
     from binance_bot import run_binance_bot
     from exit_monitor import run_exit_monitor
+    from copy_bot import run_copy_bot
 
     log_agent("no_bot", "idle", "NO Bot started")
     log_agent("binance_bot", "idle", "Binance Bot started")
@@ -781,6 +782,7 @@ def main():
     schedule.every(5).minutes.do(run_no_bot, db, portfolio)
     schedule.every(1).minutes.do(run_binance_bot, db, portfolio)
     schedule.every(1).minutes.do(run_exit_monitor, db, portfolio)
+    schedule.every(2).minutes.do(run_copy_bot, db, portfolio)
     schedule.every(5).minutes.do(portfolio.snapshot)
 
     logger.info("All agents scheduled. Bot running 24/7.")
