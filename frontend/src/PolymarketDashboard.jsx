@@ -64,10 +64,10 @@ const CalibrationRow = ({row}) => {
 // ── NAV ───────────────────────────────────────────────────────────
 const NAV_ITEMS = [
   {key:"overview",   icon:"◈", label:"Overview"},
-  {key:"signals",    icon:"◆", label:"Signals"},
+  {key:"positions",  icon:"◆", label:"Positions"},
+  {key:"signals",    icon:"⟡", label:"Signals"},
   {key:"trades",     icon:"↕", label:"Trades"},
-  {key:"activity",   icon:"⟳", label:"Activity"},
-  {key:"calibration",icon:"⚙", label:"Calibration"},
+  {key:"calibration",icon:"⚙", label:"Calib"},
 ];
 
 // ── EVENT TYPES (activity feed) ──────────────────────────────────
@@ -85,18 +85,21 @@ export default function Dashboard() {
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
   const [tfIdx, setTfIdx]       = useState(2);  // 30D
   const [mobileTab, setMobileTab] = useState("overview");
-  const [desktopTab, setDesktopTab] = useState("signals");
+  const [desktopTab, setDesktopTab] = useState("positions");
   const [elapsed, setElapsed]   = useState(0);
   const [apiError, setApiError] = useState(false);
   const [expandedAgent, setExpandedAgent] = useState(false);
   const activityRef = useRef(null);
 
   const [portfolio, setPortfolio] = useState({
-    balance:1000, daily_pnl:0, total_pnl:0, win_rate:0,
-    open_positions:0, drawdown_pct:0, total_trades:0, paper_trading:true, roi_pct:0
+    balance:1000, daily_pnl:0, total_pnl:0, realized_pnl:0, unrealized_pnl:0,
+    win_rate:0, open_positions:0, drawdown_pct:0, total_trades:0,
+    paper_trading:true, roi_pct:0, cash:1000
   });
   const [signals,     setSignals]     = useState([]);
   const [results,     setResults]     = useState([]);
+  const [paperPositions, setPaperPositions] = useState([]);
+  const [paperTrades,    setPaperTrades]    = useState([]);
   const [calibration, setCalibration] = useState([]);
   const [cityStats,   setCityStats]   = useState([]);
   const [pnlSeries,   setPnlSeries]   = useState([]);
@@ -117,27 +120,39 @@ export default function Dashboard() {
   useEffect(()=>{
     const fetchData = async () => {
       try {
-        const [port,sigs,res,cal,cs,pnl,scan] = await Promise.all([
-          fetch(`${API_BASE}/api/weather/portfolio`).then(r=>r.json()),
+        const [port,sigs,res,pp,pt,pb,cal,cs,scan] = await Promise.all([
+          fetch(`${API_BASE}/api/paper/portfolio`).then(r=>r.json()),
           fetch(`${API_BASE}/api/weather/signals`).then(r=>r.json()),
           fetch(`${API_BASE}/api/weather/results`).then(r=>r.json()),
+          fetch(`${API_BASE}/api/paper/positions`).then(r=>r.json()),
+          fetch(`${API_BASE}/api/paper/trades`).then(r=>r.json()),
+          fetch(`${API_BASE}/api/paper/bankroll`).then(r=>r.json()),
           fetch(`${API_BASE}/api/weather/calibration`).then(r=>r.json()),
           fetch(`${API_BASE}/api/weather/city_stats`).then(r=>r.json()),
-          fetch(`${API_BASE}/api/weather/pnl_history`).then(r=>r.json()),
           fetch(`${API_BASE}/api/weather/scanner_status`).then(r=>r.json()),
         ]);
         setPortfolio(port);
         setSignals(sigs||[]);
         setResults(res||[]);
+        setPaperPositions(pp||[]);
+        setPaperTrades(pt||[]);
         setCalibration(cal||[]);
         setCityStats(cs||[]);
-        setPnlSeries(pnl||[]);
+        // Build P&L series from bankroll history
+        const history = (pb && pb.history) || [];
+        const chartData = history.map(h => ({
+          time: h.ts ? new Date(h.ts).toLocaleTimeString("en-US",{timeZone:"America/Los_Angeles",hour:"2-digit",minute:"2-digit"}) : "",
+          balance: h.equity,
+          realized: 1000 + (h.realized_pnl || 0),
+        }));
+        if (chartData.length === 0) chartData.push({time:"start",balance:1000,realized:1000});
+        setPnlSeries(chartData);
         setScanner(scan||{status:"unknown",message:"No data"});
         setApiError(false);
       } catch(e){ setApiError(true); }
     };
     fetchData();
-    const interval = setInterval(fetchData, 15000);  // 15s polling — weather is slow-moving
+    const interval = setInterval(fetchData, 15000);  // 15s polling
     return()=>clearInterval(interval);
   },[]);
 
@@ -305,6 +320,48 @@ export default function Dashboard() {
             </div>
           )}
 
+          {/* POSITIONS TAB — live paper positions */}
+          {mobileTab==="positions" && (
+            <div>
+              <div style={{fontSize:10,color:"#8ab8c8",letterSpacing:".14em",marginBottom:12}}>OPEN POSITIONS · {paperPositions.length}</div>
+              {paperPositions.length===0?(
+                <div className="mob-card" style={{textAlign:"center",color:"#8ab8c8",fontSize:12,padding:"32px 14px"}}>
+                  No open positions. Trader will auto-open on next scan.
+                </div>
+              ):paperPositions.map((p,i)=>{
+                const pnlPct = p.stake_usd > 0 ? (p.unrealized_pnl / p.stake_usd * 100) : 0;
+                return (
+                  <div key={i} className="mob-card" style={{borderLeft:`3px solid ${CITIES[p.city]?.color||"#00ff8c"}`}}>
+                    <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:6}}>
+                      <CityBadge city={p.city}/>
+                      <DirectionBadge dir={p.direction}/>
+                      <span style={{fontSize:10,color:"#c8d8e0",fontWeight:600}}>{p.bucket}</span>
+                      <span style={{fontSize:9,color:"#4a6070",marginLeft:"auto"}}>{p.target_date}</span>
+                    </div>
+                    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8,marginBottom:6}}>
+                      {[
+                        ["FILL", p.fill_price?.toFixed(3), "#c8d8e0"],
+                        ["NOW",  p.current_price?.toFixed(3), p.current_price>=p.fill_price?"#00a858":"#ff4455"],
+                        ["STAKE", fmt$(p.stake_usd), "#f0c070"],
+                      ].map(([l,v,c])=>(
+                        <div key={l} style={{textAlign:"center"}}>
+                          <div style={{fontSize:8,color:"#8ab8c8",marginBottom:2}}>{l}</div>
+                          <div style={{fontSize:11,color:c,fontWeight:500}}>{v}</div>
+                        </div>
+                      ))}
+                    </div>
+                    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",paddingTop:6,borderTop:"1px solid #0c1820"}}>
+                      <span style={{fontSize:9,color:"#8ab8c8"}}>Model: <span style={{color:"#80c8e0"}}>{fmtPct(p.ensemble_prob)}</span> · {p.n_models_agree}/4</span>
+                      <span style={{fontSize:14,fontWeight:500,color:p.unrealized_pnl>=0?"#00a858":"#ff4455"}}>
+                        {sign(p.unrealized_pnl)}{fmt$(Math.abs(p.unrealized_pnl))} ({sign(pnlPct)}{Math.abs(pnlPct).toFixed(1)}%)
+                      </span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
           {/* SIGNALS TAB */}
           {mobileTab==="signals" && (
             <div>
@@ -342,30 +399,30 @@ export default function Dashboard() {
             </div>
           )}
 
-          {/* TRADES TAB */}
+          {/* TRADES TAB — closed paper trades */}
           {mobileTab==="trades" && (
             <div>
-              <div style={{fontSize:10,color:"#8ab8c8",letterSpacing:".14em",marginBottom:12}}>RESOLVED · {results.length}</div>
-              {results.length===0?(
-                <div className="mob-card" style={{textAlign:"center",color:"#8ab8c8",fontSize:12,padding:"32px 14px"}}>No resolved trades yet</div>
-              ):results.slice(0,50).map((t,i)=>(
+              <div style={{fontSize:10,color:"#8ab8c8",letterSpacing:".14em",marginBottom:12}}>CLOSED · {paperTrades.length}</div>
+              {paperTrades.length===0?(
+                <div className="mob-card" style={{textAlign:"center",color:"#8ab8c8",fontSize:12,padding:"32px 14px"}}>No closed paper trades yet</div>
+              ):paperTrades.slice(0,50).map((t,i)=>(
                 <div key={i} className="mob-card">
                   <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:6}}>
                     <CityBadge city={t.city}/>
                     <DirectionBadge dir={t.direction}/>
                     <span style={{fontSize:10,color:"#c8d8e0"}}>{t.bucket}</span>
-                    <span style={{fontSize:9,color:"#4a6070",marginLeft:"auto"}}>{t.target_date}</span>
+                    <span style={{fontSize:9,color:"#4a6070",marginLeft:"auto"}}>{t.closed_at?new Date(t.closed_at).toLocaleDateString("en-US",{month:"numeric",day:"numeric"}):""}</span>
                   </div>
                   <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:4}}>
                     <div style={{fontSize:10,color:"#8ab8c8"}}>
-                      Actual: <span style={{color:"#fff"}}>{t.actual_high?.toFixed(1)}°F</span>
+                      Fill: <span style={{color:"#fff"}}>{t.fill_price?.toFixed(3)}</span>
+                      {" → Exit: "}<span style={{color:"#fff"}}>{t.exit_price?.toFixed(3)}</span>
                     </div>
-                    <span style={{fontSize:15,fontWeight:500,color:(t.pnl||0)>=0?"#00a858":"#ff4455"}}>{sign(t.pnl||0)}{fmt$(t.pnl||0)}</span>
+                    <span style={{fontSize:15,fontWeight:500,color:(t.realized_pnl||0)>=0?"#00a858":"#ff4455"}}>{sign(t.realized_pnl||0)}{fmt$(t.realized_pnl||0)}</span>
                   </div>
                   <div style={{fontSize:9,color:"#8ab8c8",display:"flex",gap:10}}>
-                    <span>Model: <span style={{color:"#c8d8e0"}}>{fmtPct(t.ensemble_prob)}</span></span>
-                    <span>Mkt: <span style={{color:"#c8d8e0"}}>{t.market_price?.toFixed(3)}</span></span>
-                    <span style={{marginLeft:"auto",padding:"1px 6px",borderRadius:2,background:t.won?"#002010":"#200010",color:t.won?"#00a858":"#ff4455",fontSize:9}}>{t.won?"WON":"LOST"}</span>
+                    <span>Stake: <span style={{color:"#f0c070"}}>{fmt$(t.stake_usd)}</span></span>
+                    <span style={{marginLeft:"auto",padding:"1px 6px",borderRadius:2,background:t.exit_reason==="TAKE_PROFIT"?"#002010":t.exit_reason==="STOP_LOSS"?"#200010":"#141400",color:t.exit_reason==="TAKE_PROFIT"?"#00a858":t.exit_reason==="STOP_LOSS"?"#ff4455":"#c8d8e0",fontSize:9,fontWeight:500}}>{t.exit_reason}</span>
                   </div>
                 </div>
               ))}
@@ -588,7 +645,7 @@ export default function Dashboard() {
 
           {/* Desktop tabs */}
           <div style={{display:"flex",borderBottom:"1px solid #0c1c28",background:"#070a0d",flexShrink:0}}>
-            {[["signals",signals.length],["trades",results.length],["calibration",calibration.length]].map(([t,n])=>(
+            {[["positions",paperPositions.length],["signals",signals.length],["trades",paperTrades.length],["calibration",calibration.length]].map(([t,n])=>(
               <button key={t} className="tb" onClick={()=>setDesktopTab(t)} style={{padding:"8px 16px",fontSize:9,letterSpacing:".12em",color:desktopTab===t?"#00ff8c":"#8ab8c8",borderBottom:desktopTab===t?"2px solid #00ff8c":"2px solid transparent",marginBottom:-1,transition:"color .15s"}}>
                 {t.toUpperCase()} <span style={{marginLeft:5,fontSize:8,color:desktopTab===t?"#009860":"#c8d8e0"}}>{n}</span>
               </button>
@@ -596,6 +653,32 @@ export default function Dashboard() {
           </div>
 
           <div style={{flex:1,overflowY:"auto"}}>
+            {/* POSITIONS TABLE — live paper positions with unrealized P&L */}
+            {desktopTab==="positions"&&(paperPositions.length===0?<div style={{padding:"40px",textAlign:"center",color:"#8ab8c8",fontSize:11}}>No open positions. Waiting for scanner to fire.</div>:(
+              <table style={{width:"100%",borderCollapse:"collapse",fontSize:9}}>
+                <thead style={{background:"#070a0d",position:"sticky",top:0}}>
+                  <tr>{["CITY","BUCKET","DIR","MODEL %","FILL","NOW","STAKE","UNRLZD","%","TGT DATE"].map(h=>(<th key={h} style={{padding:"6px 10px",textAlign:"left",color:"#8ab8c8",fontSize:7,letterSpacing:".12em",fontWeight:400,borderBottom:"1px solid #0c1c28",whiteSpace:"nowrap"}}>{h}</th>))}</tr>
+                </thead>
+                <tbody>{paperPositions.map((p,i)=>{
+                  const pnlPct = p.stake_usd > 0 ? (p.unrealized_pnl / p.stake_usd * 100) : 0;
+                  return (
+                    <tr key={i} className="rh" style={{borderBottom:"1px solid #07080b"}}>
+                      <td style={{padding:"8px 10px"}}><CityBadge city={p.city}/></td>
+                      <td style={{padding:"8px 10px",color:"#fff",fontWeight:500}}>{p.bucket}</td>
+                      <td style={{padding:"8px 10px"}}><DirectionBadge dir={p.direction}/></td>
+                      <td style={{padding:"8px 10px",color:"#80c8e0"}}>{fmtPct(p.ensemble_prob)}</td>
+                      <td style={{padding:"8px 10px",color:"#c8d8e0"}}>{p.fill_price?.toFixed(3)}</td>
+                      <td style={{padding:"8px 10px",color:p.current_price>=p.fill_price?"#00a858":"#ff4455",fontWeight:500}}>{p.current_price?.toFixed(3)}</td>
+                      <td style={{padding:"8px 10px",color:"#f0c070"}}>{fmt$(p.stake_usd)}</td>
+                      <td style={{padding:"8px 10px",fontWeight:500,color:p.unrealized_pnl>=0?"#00a858":"#ff4455"}}>{sign(p.unrealized_pnl)}{fmt$(Math.abs(p.unrealized_pnl))}</td>
+                      <td style={{padding:"8px 10px",color:pnlPct>=0?"#00a858":"#ff4455",fontWeight:500}}>{sign(pnlPct)}{Math.abs(pnlPct).toFixed(1)}%</td>
+                      <td style={{padding:"8px 10px",color:"#8ab8c8",fontSize:8}}>{p.target_date}</td>
+                    </tr>
+                  );
+                })}</tbody>
+              </table>
+            ))}
+
             {/* SIGNALS TABLE */}
             {desktopTab==="signals"&&(signals.length===0?<div style={{padding:"40px",textAlign:"center",color:"#8ab8c8",fontSize:11}}>No edge candidates. Scanner running every 5–60 min.</div>:(
               <table style={{width:"100%",borderCollapse:"collapse",fontSize:9}}>
@@ -618,27 +701,30 @@ export default function Dashboard() {
               </table>
             ))}
 
-            {/* TRADES TABLE */}
-            {desktopTab==="trades"&&(results.length===0?<div style={{padding:"40px",textAlign:"center",color:"#8ab8c8",fontSize:11}}>No resolved trades yet. Waiting for first resolution.</div>:(
+            {/* TRADES TABLE — closed paper trades */}
+            {desktopTab==="trades"&&(paperTrades.length===0?<div style={{padding:"40px",textAlign:"center",color:"#8ab8c8",fontSize:11}}>No closed paper trades yet. Positions resolve at noon UTC or when stop/target hits.</div>:(
               <table style={{width:"100%",borderCollapse:"collapse",fontSize:9}}>
                 <thead style={{background:"#070a0d",position:"sticky",top:0}}>
-                  <tr>{["DATE","CITY","BUCKET","DIR","MODEL %","MKT","ACTUAL","RESULT","P&L"].map(h=>(<th key={h} style={{padding:"6px 10px",textAlign:"left",color:"#8ab8c8",fontSize:7,letterSpacing:".12em",fontWeight:400,borderBottom:"1px solid #0c1c28",whiteSpace:"nowrap"}}>{h}</th>))}</tr>
+                  <tr>{["CLOSED","CITY","BUCKET","DIR","FILL","EXIT","STAKE","P&L","REASON"].map(h=>(<th key={h} style={{padding:"6px 10px",textAlign:"left",color:"#8ab8c8",fontSize:7,letterSpacing:".12em",fontWeight:400,borderBottom:"1px solid #0c1c28",whiteSpace:"nowrap"}}>{h}</th>))}</tr>
                 </thead>
-                <tbody>{results.slice(0,80).map((t,i)=>(
-                  <tr key={i} className="rh" style={{borderBottom:"1px solid #07080b"}}>
-                    <td style={{padding:"8px 10px",color:"#8ab8c8",whiteSpace:"nowrap"}}>{t.target_date}</td>
-                    <td style={{padding:"8px 10px"}}><CityBadge city={t.city}/></td>
-                    <td style={{padding:"8px 10px",color:"#fff"}}>{t.bucket}</td>
-                    <td style={{padding:"8px 10px"}}><DirectionBadge dir={t.direction}/></td>
-                    <td style={{padding:"8px 10px",color:"#80c8e0"}}>{fmtPct(t.ensemble_prob)}</td>
-                    <td style={{padding:"8px 10px",color:"#c8d8e0"}}>{t.market_price?.toFixed(3)}</td>
-                    <td style={{padding:"8px 10px",color:"#c8d8e0"}}>{t.actual_high?.toFixed(1)}°F</td>
-                    <td style={{padding:"8px 10px"}}>
-                      <span style={{fontSize:8,padding:"2px 6px",borderRadius:2,background:t.won?"#002010":"#200010",color:t.won?"#00a858":"#ff4455",fontWeight:600}}>{t.won?"WON":"LOST"}</span>
-                    </td>
-                    <td style={{padding:"8px 10px",fontWeight:500,color:(t.pnl||0)>=0?"#00a858":"#ff4455"}}>{sign(t.pnl||0)}{fmt$(t.pnl||0)}</td>
-                  </tr>
-                ))}</tbody>
+                <tbody>{paperTrades.slice(0,80).map((t,i)=>{
+                  const closedDate = t.closed_at ? new Date(t.closed_at).toLocaleDateString("en-US",{month:"numeric",day:"numeric"}) : "—";
+                  return (
+                    <tr key={i} className="rh" style={{borderBottom:"1px solid #07080b"}}>
+                      <td style={{padding:"8px 10px",color:"#8ab8c8",whiteSpace:"nowrap"}}>{closedDate}</td>
+                      <td style={{padding:"8px 10px"}}><CityBadge city={t.city}/></td>
+                      <td style={{padding:"8px 10px",color:"#fff"}}>{t.bucket}</td>
+                      <td style={{padding:"8px 10px"}}><DirectionBadge dir={t.direction}/></td>
+                      <td style={{padding:"8px 10px",color:"#c8d8e0"}}>{t.fill_price?.toFixed(3)}</td>
+                      <td style={{padding:"8px 10px",color:"#c8d8e0"}}>{t.exit_price?.toFixed(3)}</td>
+                      <td style={{padding:"8px 10px",color:"#f0c070"}}>{fmt$(t.stake_usd)}</td>
+                      <td style={{padding:"8px 10px",fontWeight:500,color:(t.realized_pnl||0)>=0?"#00a858":"#ff4455"}}>{sign(t.realized_pnl||0)}{fmt$(t.realized_pnl||0)}</td>
+                      <td style={{padding:"8px 10px"}}>
+                        <span style={{fontSize:8,padding:"2px 6px",borderRadius:2,background:t.exit_reason==="TAKE_PROFIT"?"#002010":t.exit_reason==="STOP_LOSS"?"#200010":"#141400",color:t.exit_reason==="TAKE_PROFIT"?"#00a858":t.exit_reason==="STOP_LOSS"?"#ff4455":"#c8d8e0",fontWeight:500}}>{t.exit_reason}</span>
+                      </td>
+                    </tr>
+                  );
+                })}</tbody>
               </table>
             ))}
 

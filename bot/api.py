@@ -433,3 +433,135 @@ def get_insights():
         "total_trades": 0,
         "analyzed_at": None,
     })
+# PAPER TRADER ENDPOINTS
+# ─────────────────────────────────────────────────────────────────────────────
+
+@app.route("/api/paper/positions")
+def paper_positions():
+    """Open paper positions with live unrealized P&L."""
+    rows = _read_csv(os.path.join(WEATHER_DIR, "paper_positions.csv"))
+    open_ = [r for r in rows if r.get("status") == "OPEN"]
+    # Most recent first
+    open_.sort(key=lambda r: r.get("opened_at", ""), reverse=True)
+    out = []
+    for r in open_:
+        out.append({
+            "position_id":     r.get("position_id", ""),
+            "opened_at":       r.get("opened_at", ""),
+            "city":            r.get("city", ""),
+            "target_date":     r.get("target_date", ""),
+            "bucket":          r.get("bucket", ""),
+            "direction":       r.get("direction", ""),
+            "ensemble_prob":   _fnum(r.get("ensemble_prob")),
+            "entry_price":     _fnum(r.get("entry_price")),
+            "fill_price":      _fnum(r.get("fill_price")),
+            "current_price":   _fnum(r.get("current_price")),
+            "stake_usd":       _fnum(r.get("stake_usd")),
+            "shares":          _fnum(r.get("shares")),
+            "unrealized_pnl":  _fnum(r.get("unrealized_pnl")),
+            "n_models_agree":  _fint(r.get("n_models_agree")),
+        })
+    return jsonify(out)
+
+
+@app.route("/api/paper/trades")
+def paper_trades():
+    """Closed paper trades with realized P&L."""
+    rows = _read_csv(os.path.join(WEATHER_DIR, "paper_trades.csv"))
+    rows.sort(key=lambda r: r.get("closed_at", ""), reverse=True)
+    out = []
+    for r in rows[:200]:
+        out.append({
+            "position_id":     r.get("position_id", ""),
+            "opened_at":       r.get("opened_at", ""),
+            "closed_at":       r.get("closed_at", ""),
+            "city":            r.get("city", ""),
+            "target_date":     r.get("target_date", ""),
+            "bucket":          r.get("bucket", ""),
+            "direction":       r.get("direction", ""),
+            "ensemble_prob":   _fnum(r.get("ensemble_prob")),
+            "fill_price":      _fnum(r.get("fill_price")),
+            "exit_price":      _fnum(r.get("current_price")),
+            "stake_usd":       _fnum(r.get("stake_usd")),
+            "realized_pnl":    _fnum(r.get("realized_pnl")),
+            "exit_reason":     r.get("exit_reason", ""),
+        })
+    return jsonify(out)
+
+
+@app.route("/api/paper/bankroll")
+def paper_bankroll():
+    """Latest bankroll snapshot + historical series for the chart."""
+    rows = _read_csv(os.path.join(WEATHER_DIR, "paper_bankroll.csv"))
+    if not rows:
+        return jsonify({
+            "cash":           1000.0,
+            "equity":         1000.0,
+            "realized_pnl":   0.0,
+            "open_positions": 0,
+            "history":        [],
+        })
+
+    latest = rows[-1]
+    history = [{
+        "ts":           r.get("ts", ""),
+        "cash":         _fnum(r.get("cash")),
+        "equity":       _fnum(r.get("equity")),
+        "realized_pnl": _fnum(r.get("realized_pnl")),
+        "open_count":   _fint(r.get("open_positions")),
+    } for r in rows[-500:]]  # last 500 snapshots
+
+    return jsonify({
+        "cash":           _fnum(latest.get("cash")),
+        "equity":         _fnum(latest.get("equity")),
+        "realized_pnl":   _fnum(latest.get("realized_pnl")),
+        "open_positions": _fint(latest.get("open_positions")),
+        "history":        history,
+    })
+
+
+@app.route("/api/paper/portfolio")
+def paper_portfolio():
+    """Top-line summary for dashboard header bar."""
+    pos_rows = _read_csv(os.path.join(WEATHER_DIR, "paper_positions.csv"))
+    trade_rows = _read_csv(os.path.join(WEATHER_DIR, "paper_trades.csv"))
+    bank_rows = _read_csv(os.path.join(WEATHER_DIR, "paper_bankroll.csv"))
+
+    latest_bank = bank_rows[-1] if bank_rows else {}
+    cash = _fnum(latest_bank.get("cash"), 1000.0)
+    equity = _fnum(latest_bank.get("equity"), 1000.0)
+    realized = _fnum(latest_bank.get("realized_pnl"), 0.0)
+
+    open_positions = [p for p in pos_rows if p.get("status") == "OPEN"]
+    open_unrealized = sum(_fnum(p.get("unrealized_pnl")) for p in open_positions)
+
+    # Daily P&L = realized today + change in unrealized today
+    import pytz
+    from datetime import timezone
+    pacific = pytz.timezone("America/Los_Angeles")
+    today = datetime.now(pacific).date().isoformat()
+    daily_realized = sum(
+        _fnum(t.get("realized_pnl")) for t in trade_rows
+        if t.get("closed_at", "").startswith(today)
+    )
+
+    # Win rate
+    wins = sum(1 for t in trade_rows if _fnum(t.get("realized_pnl")) > 0)
+    total = len(trade_rows)
+    win_rate = round(wins / total, 3) if total else 0.0
+
+    return jsonify({
+        "balance":          equity,
+        "cash":             cash,
+        "starting":         1000.0,
+        "total_pnl":        round(realized + open_unrealized, 2),
+        "realized_pnl":     round(realized, 2),
+        "unrealized_pnl":   round(open_unrealized, 2),
+        "daily_pnl":        round(daily_realized + open_unrealized, 2),
+        "win_rate":         win_rate,
+        "total_trades":     total,
+        "open_positions":   len(open_positions),
+        "roi_pct":          round((equity - 1000.0) / 1000.0 * 100, 2),
+        "drawdown_pct":     0.0,
+        "paper_trading":    True,
+    })
