@@ -24,6 +24,7 @@ class Position(Base):
     closed_at       = Column(DateTime)
     category        = Column(String)
     expires_at      = Column(String)
+    condition_id    = Column(String)
 
 class Trade(Base):
     __tablename__ = "trades"

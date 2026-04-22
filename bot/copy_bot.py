@@ -18,7 +18,6 @@ WALLETS = [
     {"address": "0x011f2d377e56119fb09196dffb0948ae55711122", "name": "11122",         "win_rate": 0.63, "signal_weight": 0.5},
 ]
 
-# Track seen activity timestamps to avoid duplicates
 _SEEN_FILE = "/root/polymarket-bot/bot/seen_activity.json"
 
 def _load_seen():
@@ -31,7 +30,6 @@ def _load_seen():
 
 def _save_seen(seen):
     try:
-        # Keep only last 1000 entries
         items = list(seen)[-1000:]
         json.dump(items, open(_SEEN_FILE, "w"))
     except Exception:
@@ -68,7 +66,7 @@ def get_recent_activity(address):
         logger.debug("Failed to fetch activity {}: {}".format(address, e))
     return []
 
-def get_market_price(condition_id):
+def get_current_yes_price(condition_id):
     try:
         r = requests.get(
             "https://clob.polymarket.com/markets/{}".format(condition_id),
@@ -80,12 +78,13 @@ def get_market_price(condition_id):
                 return round(float(tokens[0].get("price", 0.5)), 4)
     except Exception:
         pass
-    return 0.5
+    return None
 
 def run_copy_bot(db, portfolio):
     global seen_activity
     log_agent(db, "running", "Scanning {} wallets for new trades...".format(len(WALLETS)))
     new_signals = 0
+    skipped_resolved = 0
     now_ts = _time.time()
 
     for wallet in WALLETS:
@@ -99,12 +98,9 @@ def run_copy_bot(db, portfolio):
 
         for t in activities:
             ts = float(t.get("timestamp", 0))
-
-            # Only process trades from last 10 minutes
             if now_ts - ts > 600:
                 continue
 
-            # Unique key for this activity
             act_key = "{}-{}".format(address[:10], ts)
             if act_key in seen_activity:
                 continue
@@ -117,14 +113,30 @@ def run_copy_bot(db, portfolio):
             question = t.get("title") or t.get("market") or "Unknown market"
             price = float(t.get("price") or 0.5)
             side = t.get("side", "BUY")
-            cid = t.get("conditionId") or "ACT-{}-{}".format(address[:8], str(int(ts)))
+            cid = t.get("conditionId") or ""
+
+            if side == "BUY" and price >= 0.95:
+                logger.info("Skipping near-resolved market (price={:.3f}): {}".format(price, question[:60]))
+                seen_activity.add(act_key)
+                skipped_resolved += 1
+                continue
+
+            if cid:
+                live_price = get_current_yes_price(cid)
+                if live_price is not None and live_price >= 0.95:
+                    logger.info("Skipping near-resolved (live={:.3f}): {}".format(live_price, question[:60]))
+                    seen_activity.add(act_key)
+                    skipped_resolved += 1
+                    continue
+                if live_price is not None:
+                    price = live_price
 
             pos_id = "COPY-{}-{}".format(address[:8], str(int(ts)))
             existing = db.query(Position).filter_by(id=pos_id).first()
             if existing:
                 seen_activity.add(act_key)
                 continue
-            # Check for duplicate by question
+
             dup_q = "[COPY:{}]".format(name)
             dup = db.query(Position).filter(
                 Position.question.like("%{}%".format(dup_q)),
@@ -140,18 +152,20 @@ def run_copy_bot(db, portfolio):
             if copy_size < 10:
                 continue
 
-            # Try to get expiry from Gamma API
             end_date = None
-            try:
-                gr = requests.get("https://gamma-api.polymarket.com/markets", params={"conditionId": cid}, timeout=8)
-                if gr.status_code == 200:
-                    gd = gr.json()
-                    if isinstance(gd, list) and gd:
-                        end_date = gd[0].get("endDate") or gd[0].get("endDateIso")
-            except Exception:
-                pass
+            if cid:
+                try:
+                    gr = requests.get("https://gamma-api.polymarket.com/markets", params={"conditionId": cid}, timeout=8)
+                    if gr.status_code == 200:
+                        gd = gr.json()
+                        if isinstance(gd, list) and gd:
+                            end_date = gd[0].get("endDate") or gd[0].get("endDateIso")
+                except Exception:
+                    pass
+
             position = Position(
                 id=pos_id,
+                condition_id=cid,
                 question="[COPY:{}] {}".format(name, question[:60]),
                 entry_price=price,
                 current_price=price,
@@ -166,7 +180,7 @@ def run_copy_bot(db, portfolio):
             )
             db.merge(position)
             trade = Trade(
-                condition_id=pos_id,
+                condition_id=cid or pos_id,
                 side=side,
                 price=price,
                 size=copy_size,
@@ -181,9 +195,10 @@ def run_copy_bot(db, portfolio):
             log_activity(db, "TRADE",
                 "[COPY] {} {} - paper ${:.0f} @ {:.3f}".format(name, side, copy_size, price),
                 market=question[:80],
-                detail="Whale: {} | Original: ${:.0f} | Weight: {}x | WR: {}%".format(
-                    name, size, weight, round(wallet["win_rate"]*100)))
+                detail="Whale: {} | Original: ${:.0f} | Weight: {}x | WR: {}% | CID: {}".format(
+                    name, size, weight, round(wallet["win_rate"]*100), cid[:16] if cid else "none"))
 
     _save_seen(seen_activity)
     log_agent(db, "idle",
-        "Copy scan: {} new signals from {} wallets".format(new_signals, len(WALLETS)))
+        "Copy scan: {} new signals, {} skipped near-resolved, {} wallets".format(
+            new_signals, skipped_resolved, len(WALLETS)))

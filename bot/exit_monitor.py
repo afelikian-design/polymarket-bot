@@ -40,7 +40,7 @@ def get_market_status(condition_id):
         logger.debug("Gamma check failed: {}".format(e))
     return None
 
-def get_no_price(condition_id):
+def get_yes_price(condition_id):
     try:
         r = requests.get(
             "https://clob.polymarket.com/markets/{}".format(condition_id),
@@ -48,17 +48,14 @@ def get_no_price(condition_id):
         )
         if r.status_code == 200:
             tokens = r.json().get("tokens", [])
-            if len(tokens) >= 2:
-                return round(float(tokens[1].get("price", 0)), 4)
-            elif tokens:
-                yes_price = round(float(tokens[0].get("price", 0)), 4)
-                return round(1 - yes_price, 4)
+            if tokens:
+                return round(float(tokens[0].get("price", 0)), 4)
     except Exception as e:
-        logger.debug("CLOB check failed: {}".format(e))
+        logger.debug("CLOB check failed for {}: {}".format(condition_id, e))
     return None
 
 def run_exit_monitor(db, portfolio):
-    log_agent(db, "running", "Checking NO positions for resolution...")
+    log_agent(db, "running", "Checking positions for exit conditions...")
     try:
         open_positions = db.query(Position).filter_by(status="OPEN").all()
         if not open_positions:
@@ -70,53 +67,51 @@ def run_exit_monitor(db, portfolio):
 
         for pos in open_positions:
             try:
-                condition_id = pos.id
+                pos_id = pos.id
                 hours_held = (now - pos.opened_at).total_seconds() / 3600
+                is_copy = pos_id.startswith("COPY-")
 
-                # Get current NO price from CLOB
-                no_price = get_no_price(condition_id)
-                if no_price is not None:
-                    pos.current_price = no_price
-                    db.commit()
+                real_cid = getattr(pos, "condition_id", None) or ""
+                clob_id = real_cid if (real_cid and not real_cid.startswith("COPY-")) else None
 
-                # Check resolution via Gamma
-                status = get_market_status(condition_id)
+                if clob_id:
+                    yes_price = get_yes_price(clob_id)
+                    if yes_price is not None:
+                        pos.current_price = yes_price
+                        db.commit()
+                    else:
+                        yes_price = pos.current_price
+                else:
+                    yes_price = pos.current_price
+
                 should_close = False
                 exit_reason = ""
-                exit_price = pos.current_price
+                exit_price = yes_price
 
-                if status:
-                    if status.get("closed") or status.get("resolved"):
+                if clob_id:
+                    status = get_market_status(clob_id)
+                    if status and (status.get("closed") or status.get("resolved")):
                         should_close = True
                         exit_reason = "RESOLVED"
-                        # If NO won, price goes to 1.0. If YES won, price goes to 0.0
-                        exit_price = no_price if no_price is not None else pos.current_price
-
-                is_copy = condition_id.startswith("COPY-")
 
                 if is_copy:
-                    # Copy trades — only exit on resolution or extreme moves
-                    # Take profit when price hits 0.99 (near certain resolution)
-                    if not should_close and pos.current_price >= 0.99:
+                    if not should_close and clob_id and yes_price >= 0.97 and (yes_price - pos.entry_price) >= 0.03:
                         should_close = True
                         exit_reason = "TAKE_PROFIT"
-                        exit_price = pos.current_price
-                    # Stop loss when price drops below 0.05 (trade going badly wrong)
-                    if not should_close and pos.current_price <= 0.05 and hours_held > 2:
+                    if not should_close and clob_id and yes_price <= 0.10 and hours_held > 1:
                         should_close = True
                         exit_reason = "STOP_LOSS"
-                        exit_price = pos.current_price
+                    if not should_close and not clob_id and hours_held > 24:
+                        should_close = True
+                        exit_reason = "NO_TRACKING_DATA"
+                        exit_price = pos.entry_price
                 else:
-                    # NO bot trades — take profit when NO price > 0.92
-                    if not should_close and pos.current_price >= 0.92:
+                    if not should_close and clob_id and yes_price <= 0.08:
                         should_close = True
                         exit_reason = "TAKE_PROFIT"
-                        exit_price = pos.current_price
-                    # Stop loss if NO price drops below 0.25 (YES winning)
-                    if not should_close and pos.current_price <= 0.25 and hours_held > 2:
+                    if not should_close and clob_id and yes_price >= 0.75 and hours_held > 2:
                         should_close = True
                         exit_reason = "STOP_LOSS"
-                        exit_price = pos.current_price
 
                 if should_close:
                     shares = pos.size_usd / pos.entry_price if pos.entry_price > 0 else 0
@@ -127,7 +122,7 @@ def run_exit_monitor(db, portfolio):
                     pos.closed_at = now
                     pos.pnl = pnl
                     trade = Trade(
-                        condition_id=condition_id,
+                        condition_id=clob_id or pos_id,
                         side="SELL",
                         price=exit_price,
                         size=shares,
@@ -140,13 +135,14 @@ def run_exit_monitor(db, portfolio):
                     log_activity(db, "EXIT",
                         "CLOSED [{}] PnL: ${:+.2f}".format(exit_reason, pnl),
                         market=pos.question,
-                        detail="Entry: {:.3f} → Exit: {:.3f} | Held: {:.1f}h | Size: ${:.0f}".format(
-                            pos.entry_price, exit_price, hours_held, pos.size_usd))
+                        detail="Entry: {:.3f} -> Exit: {:.3f} | Held: {:.1f}h | Size: ${:.0f} | CID: {}".format(
+                            pos.entry_price, exit_price, hours_held, pos.size_usd,
+                            clob_id[:16] if clob_id else "none"))
                 else:
-                    pnl = (pos.current_price - pos.entry_price) * (pos.size_usd / pos.entry_price) if pos.entry_price > 0 else 0
-                    log_activity(db, "EXIT",
-                        "Watching — {:.1f}h held | NO={:.3f} | PnL: ${:+.2f}".format(
-                            hours_held, pos.current_price, pnl),
+                    pnl = (yes_price - pos.entry_price) * (pos.size_usd / pos.entry_price) if pos.entry_price > 0 else 0
+                    log_activity(db, "WATCH",
+                        "Watching {:.1f}h | YES={:.3f} | PnL: ${:+.2f} | CID: {}".format(
+                            hours_held, yes_price, pnl, clob_id[:16] if clob_id else "MISSING"),
                         market=pos.question)
 
             except Exception as e:

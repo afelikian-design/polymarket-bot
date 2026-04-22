@@ -5,11 +5,43 @@ from database import (init_db, Position, Trade, AgentLog,
                       WalletSnapshot, WhaleSignal, PrebuiltThesis,
                       ActivityLog)
 from datetime import datetime, timedelta
+import os
+import csv
 
 app = Flask(__name__)
 CORS(app)
 db = init_db(Config.DB_PATH)
 
+# ─────────────────────────────────────────────────────────────────────────────
+# WEATHER BOT — paths & helpers
+# ─────────────────────────────────────────────────────────────────────────────
+WEATHER_DIR = "/root/polymarket-bot/weather/data"
+
+def _read_csv(path):
+    """Read a CSV into list of dicts; return empty list if missing."""
+    if not os.path.exists(path):
+        return []
+    try:
+        with open(path, newline="") as f:
+            return list(csv.DictReader(f))
+    except Exception:
+        return []
+
+def _fnum(v, default=0.0):
+    try:
+        return float(v) if v not in (None, "", "None") else default
+    except (ValueError, TypeError):
+        return default
+
+def _fint(v, default=0):
+    try:
+        return int(float(v)) if v not in (None, "", "None") else default
+    except (ValueError, TypeError):
+        return default
+
+# ─────────────────────────────────────────────────────────────────────────────
+# LEGACY (kept for main.py compat, but no longer consumed by dashboard)
+# ─────────────────────────────────────────────────────────────────────────────
 def _get_daily_pnl():
     from datetime import timezone
     import pytz
@@ -23,249 +55,276 @@ def _get_daily_pnl():
     ).all()
     return round(sum(p.pnl or 0 for p in trades), 2)
 
-@app.route("/api/portfolio")
-def get_portfolio():
-    snap = db.query(WalletSnapshot)\
-        .order_by(WalletSnapshot.snapshotted_at.desc()).first()
-    open_pos = db.query(Position).filter_by(status="OPEN").all()
-    closed   = db.query(Position).filter_by(status="CLOSED").all()
-    wins     = sum(1 for p in closed if (p.pnl or 0) > 0)
-    win_rate = round(wins / len(closed), 3) if closed else 0
-    open_pnl = sum(
-        (p.current_price - p.entry_price) * (p.size_usd / p.entry_price)
-        for p in open_pos if p.entry_price > 0
-    )
-    return jsonify({
-        "balance":        snap.balance if snap else 1000.0,
-        "daily_pnl":      _get_daily_pnl(),
-        "open_pnl":       round(open_pnl, 2),
-        "win_rate":       win_rate,
-        "open_positions": len(open_pos),
-        "drawdown_pct":   snap.drawdown_pct if snap else 0.0,
-        "paper_trading":  Config.PAPER_TRADING,
-        "total_trades":   len(closed),
-    })
+# ─────────────────────────────────────────────────────────────────────────────
+# WEATHER ENDPOINTS — new dashboard reads these
+# ─────────────────────────────────────────────────────────────────────────────
 
-@app.route("/api/positions")
-def get_positions():
-    positions = db.query(Position).filter_by(status="OPEN")\
-        .order_by(Position.opened_at.desc()).all()
-    return jsonify([{
-        "id":             p.id,
-        "question":       p.question,
-        "entry_price":    p.entry_price,
-        "current_price":  p.current_price,
-        "size_usd":       p.size_usd,
-        "our_probability":p.our_probability,
-        "expected_gap":   p.expected_gap,
-        "thesis":         p.thesis,
-        "opened_at":      p.opened_at.isoformat() if p.opened_at else None,
-        "no_price":       round(1 - p.current_price, 4) if (p.question or "").startswith("[COPY") else p.entry_price,
-        "yes_price":      round(p.current_price, 4) if (p.question or "").startswith("[COPY") else round(1 - p.entry_price, 4),
-        "expires_at":     p.expires_at if hasattr(p, "expires_at") else None,
-        "unrealized_pnl": round(
-            (p.current_price - p.entry_price) * (p.size_usd / p.entry_price), 2
-        ) if p.entry_price > 0 else 0
-    } for p in positions])
-
-@app.route("/api/trades")
-def get_trades():
-    cutoff = datetime.utcnow() - timedelta(days=30)
-    positions = db.query(Position).filter(
-        Position.status == "CLOSED",
-        Position.closed_at >= cutoff
-    ).order_by(Position.closed_at.desc()).limit(50).all()
-    return jsonify([{
-        "question":    p.question,
-        "entry_price": p.entry_price,
-        "exit_price":  p.exit_price,
-        "size_usd":    p.size_usd,
-        "pnl":         p.pnl,
-        "exit_reason": p.exit_reason,
-        "closed_at":   p.closed_at.isoformat() if p.closed_at else None,
-        "opened_at":   p.opened_at.isoformat() if p.opened_at else None,
-    } for p in positions])
-
-@app.route("/api/agents")
-def get_agents():
-    result = {}
-    for agent in ["no_bot","binance_bot","exit_monitor","copy_bot"]:
-        latest = db.query(AgentLog).filter_by(agent=agent)\
-            .order_by(AgentLog.logged_at.desc()).first()
-        result[agent] = {
-            "status":    latest.status if latest else "unknown",
-            "message":   latest.message if latest else "No data",
-            "last_seen": latest.logged_at.isoformat() if latest else None
-        }
-    return jsonify(result)
-
-@app.route("/api/pnl_history")
-def get_pnl_history():
-    snaps = db.query(WalletSnapshot)\
-        .order_by(WalletSnapshot.snapshotted_at.desc()).limit(96).all()
-    snaps.reverse()
-    return jsonify([{
-        "time":      s.snapshotted_at.strftime("%H:%M"),
-        "balance":   s.balance,
-        "daily_pnl": s.daily_pnl,
-    } for s in snaps])
-
-@app.route("/api/whale_signals")
-def get_whale_signals():
-    signals = db.query(WhaleSignal)\
-        .order_by(WhaleSignal.detected_at.desc()).limit(20).all()
-    return jsonify([{
-        "wallet":        s.wallet_address[:6] + "..." + s.wallet_address[-4:],
-        "tier":          s.wallet_tier,
-        "question":      s.question,
-        "entry_price":   s.entry_price,
-        "size_usd":      s.size_usd,
-        "has_thesis":    s.has_thesis,
-        "action":        s.action_taken,
-        "detected_at":   s.detected_at.isoformat(),
-        "signal_weight": s.signal_weight,
-    } for s in signals])
-
-@app.route("/api/queue")
-def get_queue():
-    import json as _json
-    try:
-        with open("thesis.json") as f:
-            theses = _json.load(f)
-        def _kelly(p_win, mkt_price, bankroll, confidence):
-            if not (0 < mkt_price < 1) or not (0 < p_win < 1):
-                return 0.0
-            b = (1 / mkt_price) - 1
-            q = 1 - p_win
-            f = (p_win * b - q) / b
-            if f <= 0:
-                return 0.0
-            conf_scalar = 0.5 + (min(max(confidence, 50), 100) - 50) / 100.0
-            max_fraction = Config.MAX_KELLY_FRACTION * conf_scalar
-            return round(bankroll * min(f, max_fraction), 2)
-
-        # Get current balance from snapshots
-        snap = db.query(WalletSnapshot).order_by(WalletSnapshot.snapshotted_at.desc()).first()
-        bal = snap.balance if snap else 1000.0
-
-        result = []
-        for t in theses:
-            p_win = t.get("our_probability", 0)
-            mkt = t.get("market_price", 0.5)
-            conf = t.get("confidence", 50)
-            size = _kelly(p_win, mkt, bal, conf)
-            result.append({
-                "condition_id":    t.get("condition_id"),
-                "question":        t.get("question"),
-                "price":           mkt,
-                "our_probability": p_win,
-                "edge":            t.get("edge"),
-                "confidence":      conf,
-                "thesis":          t.get("thesis"),
-                "suggested_size":  size,
-            })
-        return jsonify(result)
-    except:
-        return jsonify([])
-
-@app.route("/api/risk")
-def get_risk():
-    return jsonify({
-        "paper_trading":      Config.PAPER_TRADING,
-        "daily_loss_limit":   Config.DAILY_LOSS_LIMIT,
-        "max_drawdown":       Config.MAX_DRAWDOWN,
-        "max_kelly":          Config.MAX_KELLY_FRACTION,
-        "max_open_positions": Config.MAX_OPEN_POSITIONS,
-        "min_confidence":      Config.MIN_CONFIDENCE,
-    })
-
-@app.route("/api/control/start", methods=["POST"])
-def control_start():
-    import subprocess
-    subprocess.Popen(["systemctl", "start", "polybot"])
-    return jsonify({"status": "started"})
-
-@app.route("/api/control/stop", methods=["POST"])
-def control_stop():
-    import subprocess
-    subprocess.run(["systemctl", "stop", "polybot"])
-    return jsonify({"status": "stopped"})
-
-@app.route("/api/control/halt", methods=["POST"])
-def control_halt():
-    log = AgentLog(agent="system", status="halted",
-                   message="Manual halt via dashboard")
-    db.add(log)
-    db.commit()
-    return jsonify({"status": "halted"})
-
-
-@app.route("/api/close_position/<condition_id>", methods=["POST"])
-def close_position(condition_id):
-    from datetime import datetime
-    pos = db.query(Position).filter_by(id=condition_id, status="OPEN").first()
-    if not pos:
-        return jsonify({"error": "Position not found"}), 404
-    try:
-        r = __import__("requests").get(
-            "https://clob.polymarket.com/markets/{}".format(condition_id),
-            timeout=8
-        )
-        current_price = pos.current_price
-        if r.status_code == 200:
-            tokens = r.json().get("tokens", [])
-            if tokens:
-                current_price = round(float(tokens[0].get("price", pos.current_price)), 4)
-    except:
-        current_price = pos.current_price
-
-    pnl = round((current_price - pos.entry_price) * (pos.size_usd / pos.entry_price), 2) if pos.entry_price > 0 else 0
-    pos.status = "CLOSED"
-    pos.exit_price = current_price
-    pos.exit_reason = "MANUAL_SELL"
-    pos.closed_at = datetime.utcnow()
-    pos.pnl = pnl
-    db.commit()
-    return jsonify({"status": "closed", "pnl": pnl, "exit_price": current_price})
-
-
-@app.route("/api/category_stats")
-def get_category_stats():
-    open_pos = db.query(Position).filter_by(status='OPEN').all()
-    exposure = {}
-    for p in open_pos:
-        cat = (p.category or 'OTHER') if hasattr(p, 'category') else 'OTHER'
-        if cat not in exposure:
-            exposure[cat] = {"count": 0, "size_usd": 0}
-        exposure[cat]["count"] += 1
-        exposure[cat]["size_usd"] += (p.size_usd or 0)
-    closed = db.query(Position).filter_by(status='CLOSED').all()
-    history = {}
-    for p in closed:
-        cat = (p.category or 'OTHER') if hasattr(p, 'category') else 'OTHER'
-        if cat not in history:
-            history[cat] = {"wins": 0, "losses": 0, "pnl": 0}
-        if (p.pnl or 0) > 0:
-            history[cat]["wins"] += 1
-        else:
-            history[cat]["losses"] += 1
-        history[cat]["pnl"] += (p.pnl or 0)
-    result = []
-    all_cats = set(list(exposure.keys()) + list(history.keys()))
-    for cat in all_cats:
-        exp = exposure.get(cat, {"count": 0, "size_usd": 0})
-        hist = history.get(cat, {"wins": 0, "losses": 0, "pnl": 0})
-        total = hist['wins'] + hist['losses']
-        result.append({
-            "category": cat,
-            "open_count": exp["count"],
-            "open_size_usd": round(exp["size_usd"], 2),
-            "win_rate": round(hist["wins"] / total, 3) if total > 0 else 0,
-            "total": total,
-            "wins": hist["wins"],
-            "pnl": round(hist["pnl"], 2),
+@app.route("/api/weather/signals")
+def weather_signals():
+    """Recent edge candidates from scan_v3.py. Most recent first, limit 100."""
+    rows = _read_csv(os.path.join(WEATHER_DIR, "signals.csv"))
+    rows.reverse()  # most recent first
+    out = []
+    for r in rows[:100]:
+        out.append({
+            "ts":              r.get("ts", ""),
+            "city":            r.get("city", ""),
+            "event_slug":      r.get("event_slug", ""),
+            "target_date":     r.get("target_date", ""),
+            "lead_hours":      _fnum(r.get("lead_hours")),
+            "direction":       r.get("direction", ""),
+            "bucket":          r.get("bucket", ""),
+            "ensemble_prob":   _fnum(r.get("ensemble_prob")),
+            "market_price":    _fnum(r.get("market_price")),
+            "edge":            _fnum(r.get("edge")),
+            "ensemble_mean":   _fnum(r.get("ensemble_mean")),
+            "n_members":       _fint(r.get("n_members")),
+            "n_models_agree":  _fint(r.get("n_models_agree")),
+            "size_usd":        _fnum(r.get("kelly_size_$")),
+            "aggressive":      (r.get("aggressive_window", "False") == "True"),
         })
-    return jsonify(result)
+    return jsonify(out)
+
+
+@app.route("/api/weather/results")
+def weather_results():
+    """Resolved trades with realized P&L. Most recent first, limit 200."""
+    rows = _read_csv(os.path.join(WEATHER_DIR, "results.csv"))
+    rows.reverse()
+    out = []
+    for r in rows[:200]:
+        out.append({
+            "target_date":    r.get("target_date", ""),
+            "city":           r.get("city", ""),
+            "event_slug":     r.get("market_slug", ""),
+            "bucket":         r.get("bucket", ""),
+            "direction":      r.get("direction", ""),
+            "ensemble_prob":  _fnum(r.get("ensemble_prob")),
+            "market_price":   _fnum(r.get("market_price")),
+            "edge":           _fnum(r.get("edge")),
+            "stake_usd":      _fnum(r.get("stake_$")),
+            "actual_high":    _fnum(r.get("actual_high")),
+            "bucket_hit":     (r.get("bucket_hit", "False") == "True"),
+            "won":            (r.get("won", "False") == "True"),
+            "pnl":            _fnum(r.get("pnl_$")),
+        })
+    return jsonify(out)
+
+
+@app.route("/api/weather/calibration")
+def weather_calibration():
+    """Per-city forecast error calibration table."""
+    rows = _read_csv(os.path.join(WEATHER_DIR, "error_summary.csv"))
+    out = []
+    for r in rows:
+        out.append({
+            "city":          r.get("city", ""),
+            "n_days":        _fint(r.get("n_days")),
+            "bias_f":        _fnum(r.get("bias_F")),
+            "mae_f":         _fnum(r.get("MAE_F")),
+            "sigma_f":       _fnum(r.get("sigma_F")),
+            "sigma_tight":   _fnum(r.get("sigma_tight_F")),
+            "sigma_wide":    _fnum(r.get("sigma_wide_F")),
+            "pct_within_2f": _fnum(r.get("pct_within_2F")),
+            "pct_within_3f": _fnum(r.get("pct_within_3F")),
+        })
+    return jsonify(out)
+
+
+@app.route("/api/weather/portfolio")
+def weather_portfolio():
+    """
+    Portfolio summary computed from results.csv (realized P&L) and
+    signals.csv (open positions / unresolved signals).
+    """
+    starting_balance = 1000.0
+    results = _read_csv(os.path.join(WEATHER_DIR, "results.csv"))
+    signals = _read_csv(os.path.join(WEATHER_DIR, "signals.csv"))
+
+    total_pnl = sum(_fnum(r.get("pnl_$")) for r in results)
+    total_staked = sum(_fnum(r.get("stake_$")) for r in results)
+    wins = sum(1 for r in results if (r.get("won", "False") == "True"))
+    n_closed = len(results)
+
+    # Daily P&L — Pacific timezone, most recent day's resolutions
+    import pytz
+    from datetime import timezone
+    pacific = pytz.timezone("America/Los_Angeles")
+    today = datetime.now(pacific).date().isoformat()
+    daily = sum(
+        _fnum(r.get("pnl_$")) for r in results
+        if r.get("target_date", "") == today
+    )
+
+    # Open positions = signals whose target_date hasn't passed yet
+    today_utc = datetime.utcnow().date()
+    resolved_keys = {
+        (r.get("target_date", ""), r.get("market_slug", ""), r.get("bucket", ""), r.get("direction", ""))
+        for r in results
+    }
+    open_positions = 0
+    for s in signals:
+        try:
+            td = datetime.fromisoformat(s.get("target_date", "")).date()
+        except Exception:
+            continue
+        if td < today_utc:
+            continue
+        key = (s.get("target_date", ""), s.get("market_slug", ""), s.get("bucket", ""), s.get("direction", ""))
+        if key in resolved_keys:
+            continue
+        open_positions += 1
+
+    win_rate = round(wins / n_closed, 3) if n_closed else 0
+    roi = round(total_pnl / total_staked * 100, 2) if total_staked else 0
+    balance = round(starting_balance + total_pnl, 2)
+
+    return jsonify({
+        "balance":        balance,
+        "starting":       starting_balance,
+        "daily_pnl":      round(daily, 2),
+        "total_pnl":      round(total_pnl, 2),
+        "total_staked":   round(total_staked, 2),
+        "roi_pct":        roi,
+        "win_rate":       win_rate,
+        "open_positions": open_positions,
+        "total_trades":   n_closed,
+        "drawdown_pct":   0.0,   # compute later from snapshot series
+        "paper_trading":  True,
+    })
+
+
+@app.route("/api/weather/pnl_history")
+def weather_pnl_history():
+    """
+    Reconstruct daily balance curve from results.csv by sorting
+    on target_date and doing a cumulative sum of pnl.
+    """
+    results = _read_csv(os.path.join(WEATHER_DIR, "results.csv"))
+    starting_balance = 1000.0
+
+    # Group pnl by target_date
+    by_date = {}
+    for r in results:
+        d = r.get("target_date", "")
+        if not d:
+            continue
+        by_date[d] = by_date.get(d, 0.0) + _fnum(r.get("pnl_$"))
+
+    dates = sorted(by_date.keys())
+    balance = starting_balance
+    out = []
+    for d in dates:
+        balance = round(balance + by_date[d], 2)
+        out.append({
+            "time":     d,
+            "balance":  balance,
+            "realized": balance,
+            "open_pnl": 0.0,
+            "daily_pnl": round(by_date[d], 2),
+        })
+    # Prepend starting point so chart shows a baseline
+    if out:
+        out = [{"time": "start", "balance": starting_balance, "realized": starting_balance, "open_pnl": 0.0, "daily_pnl": 0.0}] + out
+    else:
+        # No resolutions yet — return starting point as single datapoint
+        out = [{"time": "start", "balance": starting_balance, "realized": starting_balance, "open_pnl": 0.0, "daily_pnl": 0.0}]
+    return jsonify(out)
+
+
+@app.route("/api/weather/city_stats")
+def weather_city_stats():
+    """Per-city win rate + P&L, replaces old category_stats."""
+    results = _read_csv(os.path.join(WEATHER_DIR, "results.csv"))
+    signals = _read_csv(os.path.join(WEATHER_DIR, "signals.csv"))
+
+    CITIES = ["NYC", "Chicago", "Dallas", "LA"]
+    out = []
+    for city in CITIES:
+        city_results = [r for r in results if r.get("city") == city]
+        wins = sum(1 for r in city_results if r.get("won") == "True")
+        total = len(city_results)
+        pnl = sum(_fnum(r.get("pnl_$")) for r in city_results)
+        staked = sum(_fnum(r.get("stake_$")) for r in city_results)
+
+        # Open signals per city (unresolved)
+        today_utc = datetime.utcnow().date()
+        resolved_keys = {
+            (r.get("target_date", ""), r.get("market_slug", ""), r.get("bucket", ""), r.get("direction", ""))
+            for r in results
+        }
+        open_count = 0
+        open_stake = 0.0
+        for s in signals:
+            if s.get("city") != city:
+                continue
+            try:
+                td = datetime.fromisoformat(s.get("target_date", "")).date()
+            except Exception:
+                continue
+            if td < today_utc:
+                continue
+            key = (s.get("target_date", ""), s.get("market_slug", ""), s.get("bucket", ""), s.get("direction", ""))
+            if key in resolved_keys:
+                continue
+            open_count += 1
+            open_stake += _fnum(s.get("kelly_size_$"))
+
+        out.append({
+            "city":           city,
+            "open_count":     open_count,
+            "open_stake":     round(open_stake, 2),
+            "win_rate":       round(wins / total, 3) if total else 0,
+            "total":          total,
+            "wins":           wins,
+            "pnl":            round(pnl, 2),
+            "roi":            round(pnl / staked * 100, 2) if staked else 0,
+        })
+    return jsonify(out)
+
+
+@app.route("/api/weather/scanner_status")
+def weather_scanner_status():
+    """Scanner process health: last scan time + signal counts last 24h."""
+    signals = _read_csv(os.path.join(WEATHER_DIR, "signals.csv"))
+    last_ts = None
+    last_24h = 0
+    now = datetime.utcnow()
+    cutoff = now - timedelta(hours=24)
+    for s in signals:
+        ts = s.get("ts", "")
+        try:
+            dt = datetime.fromisoformat(ts.replace("Z", "").split("+")[0])
+            if dt > cutoff:
+                last_24h += 1
+            if last_ts is None or dt > last_ts:
+                last_ts = dt
+        except Exception:
+            continue
+    status = "running"
+    message = "Awaiting next scan"
+    if last_ts is None:
+        status = "idle"
+        message = "No scans yet"
+    else:
+        mins_since = int((now - last_ts).total_seconds() / 60)
+        if mins_since > 90:
+            status = "stale"
+            message = f"Last scan {mins_since}m ago"
+        else:
+            message = f"Last scan {mins_since}m ago · {last_24h} signals in 24h"
+
+    return jsonify({
+        "status":  status,
+        "message": message,
+        "last_scan_utc": last_ts.isoformat() if last_ts else None,
+        "signals_24h":   last_24h,
+    })
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# PRESERVED ENDPOINTS — still used by existing bot infrastructure
+# ─────────────────────────────────────────────────────────────────────────────
 
 @app.route("/api/activity")
 def get_activity():
@@ -293,70 +352,84 @@ def _time_ago(dt):
         return "{}m ago".format(secs // 60)
     return "{}h ago".format(secs // 3600)
 
-@app.route("/api/snapshots")
-def get_snapshots():
-    from database import WalletSnapshot
-    snaps = db.query(WalletSnapshot).order_by(WalletSnapshot.snapshotted_at.asc()).all()
-    return jsonify([{
-        "balance": s.balance,
-        "open_pnl": s.open_pnl or 0,
-        "daily_pnl": s.daily_pnl or 0,
-        "time": s.snapshotted_at.isoformat() if s.snapshotted_at else None
-    } for s in snaps])
 
-@app.route("/api/insights")
-def get_insights():
-    from database import StrategyInsight
-    import json
-    insight = db.query(StrategyInsight).order_by(StrategyInsight.analyzed_at.desc()).first()
-    if not insight:
-        return jsonify({"summary":"No analysis yet","recommendations":[],"warnings":[],"win_rate":0,"total_trades":0,"analyzed_at":None})
+@app.route("/api/risk")
+def get_risk():
     return jsonify({
-        "summary": insight.summary,
-        "recommendations": json.loads(insight.recommendations or "[]"),
-        "warnings": json.loads(insight.warnings or "[]"),
-        "win_rate": insight.win_rate,
-        "total_trades": insight.total_trades,
-        "analyzed_at": insight.analyzed_at.isoformat() if insight.analyzed_at else None
+        "paper_trading":      Config.PAPER_TRADING,
+        "daily_loss_limit":   Config.DAILY_LOSS_LIMIT,
+        "max_drawdown":       Config.MAX_DRAWDOWN,
+        "max_kelly":          Config.MAX_KELLY_FRACTION,
+        "max_open_positions": Config.MAX_OPEN_POSITIONS,
+        "min_confidence":     Config.MIN_CONFIDENCE,
     })
 
 
+@app.route("/api/control/start", methods=["POST"])
+def control_start():
+    import subprocess
+    subprocess.Popen(["systemctl", "start", "polybot"])
+    return jsonify({"status": "started"})
+
+@app.route("/api/control/stop", methods=["POST"])
+def control_stop():
+    import subprocess
+    subprocess.run(["systemctl", "stop", "polybot"])
+    return jsonify({"status": "stopped"})
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# STUBS — old dashboard still calls these; return empty arrays to avoid errors
+# from any stale frontends until the Netlify deploy propagates.
+# ─────────────────────────────────────────────────────────────────────────────
+@app.route("/api/portfolio")
+def get_portfolio():
+    # Redirect old clients to weather portfolio
+    return weather_portfolio()
+
+@app.route("/api/positions")
+def get_positions():
+    return jsonify([])
+
+@app.route("/api/trades")
+def get_trades():
+    return jsonify([])
+
+@app.route("/api/agents")
+def get_agents():
+    return jsonify({})
+
+@app.route("/api/pnl_history")
+def get_pnl_history():
+    return weather_pnl_history()
+
+@app.route("/api/whale_signals")
+def get_whale_signals():
+    return jsonify([])
+
+@app.route("/api/queue")
+def get_queue():
+    return jsonify([])
+
+@app.route("/api/category_stats")
+def get_category_stats():
+    return weather_city_stats()
 
 @app.route("/api/whale_trades")
 def get_whale_trades():
-    import requests as req
-    wallets = [
-        {"address": "0x24c8cf69a0e0a17eee21f69d29752bfa32e823e1", "name": "debased"},
-        {"address": "0x6bab41a0dc40d6dd4c1a915b8c01969479fd1292", "name": "Dropper"},
-        {"address": "0x000d257d2dc7616feaef4ae0f14600fdf50a758e", "name": "scottilicious"},
-        {"address": "0x06dcaa14f57d8a0573f5dc5940565e6de667af59", "name": "Big.Chungus"},
-        {"address": "0xd5ccdf772f795547e299de57f47966e24de8dea4", "name": "tsybka"},
-        {"address": "0x751a2b86cab503496efd325c8344e10159349ea1", "name": "Sharky6999"},
-        {"address": "0x2a019dc0089ea8c6edbbafc8a7cc9ba77b4b6397", "name": "aviato"},
-        {"address": "0x011f2d377e56119fb09196dffb0948ae55711122", "name": "11122"},
-    ]
-    all_trades = []
-    for w in wallets:
-        try:
-            r = req.get(
-                "https://data-api.polymarket.com/activity",
-                params={"user": w["address"], "limit": 5, "type": "TRADE"},
-                timeout=8
-            )
-            if r.status_code == 200:
-                trades = r.json()
-                for t in trades:
-                    all_trades.append({
-                        "name": w["name"],
-                        "address": w["address"],
-                        "market": t.get("title") or t.get("market", ""),
-                        "side": t.get("side", "BUY"),
-                        "price": t.get("price", 0),
-                        "size": t.get("cash", t.get("size", 0)),
-                        "outcome": t.get("outcome", "YES"),
-                        "timestamp": t.get("timestamp", ""),
-                    })
-        except Exception:
-            continue
-    all_trades.sort(key=lambda x: x.get("timestamp", ""), reverse=True)
-    return jsonify(all_trades[:30])
+    return jsonify([])
+
+@app.route("/api/snapshots")
+def get_snapshots():
+    return weather_pnl_history()
+
+@app.route("/api/insights")
+def get_insights():
+    return jsonify({
+        "summary": "Weather strategy paper trading. Awaiting first resolutions.",
+        "recommendations": [],
+        "warnings": [],
+        "win_rate": 0,
+        "total_trades": 0,
+        "analyzed_at": None,
+    })

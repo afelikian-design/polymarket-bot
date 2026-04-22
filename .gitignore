@@ -10,3 +10,12 @@ queue.json
 bot.log
 logs/
 build/
+
+# Weather bot — paper trading data, don't push to public repo
+weather/data/
+weather/logs/
+weather/data/
+weather/logs/
+bot/.env.save*
+bot/known_positions.json
+bot/seen_activity.json
