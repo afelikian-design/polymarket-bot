@@ -522,7 +522,7 @@ def paper_bankroll():
 
 @app.route("/api/paper/portfolio")
 def paper_portfolio():
-    """Top-line summary for dashboard header bar."""
+    """Top-line summary + equity breakdown for dashboard."""
     pos_rows = _read_csv(os.path.join(WEATHER_DIR, "paper_positions.csv"))
     trade_rows = _read_csv(os.path.join(WEATHER_DIR, "paper_trades.csv"))
     bank_rows = _read_csv(os.path.join(WEATHER_DIR, "paper_bankroll.csv"))
@@ -534,8 +534,26 @@ def paper_portfolio():
 
     open_positions = [p for p in pos_rows if p.get("status") == "OPEN"]
     open_unrealized = sum(_fnum(p.get("unrealized_pnl")) for p in open_positions)
+    open_stakes = sum(_fnum(p.get("stake_usd")) for p in open_positions)
+    open_market_value = sum(
+        _fnum(p.get("shares")) * _fnum(p.get("current_price"))
+        for p in open_positions
+    )
 
-    # Daily P&L = realized today + change in unrealized today
+    # Split realized by exit_reason: strategy trades (TP/SL/RESOLVED) vs operational
+    STRATEGY_REASONS = {"TAKE_PROFIT", "STOP_LOSS", "RESOLVED"}
+    realized_strategy = sum(
+        _fnum(t.get("realized_pnl")) for t in trade_rows
+        if t.get("exit_reason", "") in STRATEGY_REASONS
+    )
+    realized_dedupe = sum(
+        _fnum(t.get("realized_pnl")) for t in trade_rows
+        if t.get("exit_reason", "") == "DEDUPE_CLEANUP"
+    )
+    strategy_trades = [t for t in trade_rows if t.get("exit_reason", "") in STRATEGY_REASONS]
+    dedupe_trades   = [t for t in trade_rows if t.get("exit_reason", "") == "DEDUPE_CLEANUP"]
+
+    # Daily P&L = realized today (Pacific) + current unrealized
     import pytz
     from datetime import timezone
     pacific = pytz.timezone("America/Los_Angeles")
@@ -545,12 +563,18 @@ def paper_portfolio():
         if t.get("closed_at", "").startswith(today)
     )
 
-    # Win rate
-    wins = sum(1 for t in trade_rows if _fnum(t.get("realized_pnl")) > 0)
-    total = len(trade_rows)
-    win_rate = round(wins / total, 3) if total else 0.0
+    # Win rate — STRATEGY ONLY (exclude dedupe cleanup)
+    strategy_wins = sum(1 for t in strategy_trades if _fnum(t.get("realized_pnl")) > 0)
+    strategy_total = len(strategy_trades)
+    win_rate = round(strategy_wins / strategy_total, 3) if strategy_total else 0.0
+
+    # Also include all-time win rate in case we want both in UI
+    all_wins = sum(1 for t in trade_rows if _fnum(t.get("realized_pnl")) > 0)
+    all_total = len(trade_rows)
+    win_rate_all = round(all_wins / all_total, 3) if all_total else 0.0
 
     return jsonify({
+        # Core header numbers
         "balance":          equity,
         "cash":             cash,
         "starting":         1000.0,
@@ -558,12 +582,29 @@ def paper_portfolio():
         "realized_pnl":     round(realized, 2),
         "unrealized_pnl":   round(open_unrealized, 2),
         "daily_pnl":        round(daily_realized + open_unrealized, 2),
-        "win_rate":         win_rate,
-        "total_trades":     total,
+        "win_rate":         win_rate,             # strategy-only
+        "win_rate_all":     win_rate_all,         # all closures
+        "total_trades":     strategy_total,       # strategy-only count
+        "total_trades_all": all_total,
         "open_positions":   len(open_positions),
         "roi_pct":          round((equity - 1000.0) / 1000.0 * 100, 2),
         "drawdown_pct":     0.0,
         "paper_trading":    True,
+
+        # Equity breakdown
+        "breakdown": {
+            "starting":          1000.0,
+            "cash":              round(cash, 2),
+            "open_stakes":       round(open_stakes, 2),
+            "open_market_value": round(open_market_value, 2),
+            "unrealized_pnl":    round(open_unrealized, 2),
+            "realized_strategy": round(realized_strategy, 2),
+            "realized_dedupe":   round(realized_dedupe, 2),
+            "n_open":            len(open_positions),
+            "n_strategy_trades": strategy_total,
+            "n_dedupe_trades":   len(dedupe_trades),
+            "equity":            round(equity, 2),
+        },
     })
 
 

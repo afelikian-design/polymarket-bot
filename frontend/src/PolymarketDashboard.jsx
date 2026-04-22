@@ -349,6 +349,34 @@ export default function Dashboard() {
                 <div style={{fontSize:10,color:"#c8d8e0",lineHeight:1.4}}>{scanner.message}</div>
               </div>
 
+              {/* Equity breakdown */}
+              <div className="mob-card">
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",marginBottom:8}}>
+                  <span style={{fontSize:10,color:"#8ab8c8",letterSpacing:".14em"}}>EQUITY BREAKDOWN</span>
+                  <span style={{fontSize:12,color:"#fff",fontWeight:500}}>{fmt$(portfolio.breakdown?.equity ?? portfolio.balance ?? 1000)}</span>
+                </div>
+                {(() => {
+                  const b = portfolio.breakdown || {};
+                  const rows = [
+                    ["Starting",     b.starting ?? 1000, "#8ab8c8", null],
+                    ["Cash",         b.cash ?? 0, "#c8d8e0", null],
+                    [`Open stakes${b.n_open ? ` (${b.n_open})` : ""}`, b.open_stakes ?? 0, "#f0c070", null],
+                    ["  Market value", b.open_market_value ?? 0, "#8ab8c8", null],
+                    ["  Unrealized",   b.unrealized_pnl ?? 0, (b.unrealized_pnl ?? 0) >= 0 ? "#00a858" : "#ff4455", "signed"],
+                    [`Realized strat${b.n_strategy_trades ? ` (${b.n_strategy_trades})` : ""}`, b.realized_strategy ?? 0, (b.realized_strategy ?? 0) >= 0 ? "#00a858" : "#ff4455", "signed"],
+                    [`Realized dedupe${b.n_dedupe_trades ? ` (${b.n_dedupe_trades})` : ""}`, b.realized_dedupe ?? 0, (b.realized_dedupe ?? 0) >= 0 ? "#00a858" : "#ff4455", "signed"],
+                  ];
+                  return rows.map(([label, val, color, fmt]) => (
+                    <div key={label} style={{display:"flex",justifyContent:"space-between",padding:"3px 0",fontSize:10,borderBottom:"1px solid #0c1820"}}>
+                      <span style={{color:"#c8d8e0"}}>{label}</span>
+                      <span style={{color, fontWeight:500}}>
+                        {fmt === "signed" ? `${sign(val)}${fmt$(Math.abs(val))}` : fmt$(val)}
+                      </span>
+                    </div>
+                  ));
+                })()}
+              </div>
+
               {/* City Exposure */}
               <div className="mob-card">
                 <div style={{fontSize:10,color:"#8ab8c8",letterSpacing:".14em",marginBottom:8}}>OPEN SIGNALS BY CITY</div>
@@ -639,6 +667,34 @@ export default function Dashboard() {
                 <span style={{fontSize:7,fontWeight:700,color:v.startsWith("-")?"#ff4455":"#00ff8c"}}>{v}</span>
               </div>
             ))}
+          </div>
+
+          {/* EQUITY BREAKDOWN */}
+          <div>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",marginBottom:6}}>
+              <span style={{fontSize:8,color:"#8ab8c8",letterSpacing:".2em"}}>EQUITY BREAKDOWN</span>
+              <span style={{fontSize:9,color:"#fff",fontWeight:500}}>{fmt$(portfolio.breakdown?.equity ?? portfolio.balance ?? 1000)}</span>
+            </div>
+            {(() => {
+              const b = portfolio.breakdown || {};
+              const rows = [
+                ["Starting",        b.starting ?? 1000, "#8ab8c8", null],
+                ["Cash",            b.cash ?? 0, "#c8d8e0", null],
+                [`Open stakes${b.n_open ? ` (${b.n_open})` : ""}`, b.open_stakes ?? 0, "#f0c070", null],
+                ["  Market value",  b.open_market_value ?? 0, "#8ab8c8", null],
+                ["  Unrealized",    b.unrealized_pnl ?? 0, (b.unrealized_pnl ?? 0) >= 0 ? "#00a858" : "#ff4455", "signed"],
+                [`Realized strat${b.n_strategy_trades ? ` (${b.n_strategy_trades})` : ""}`, b.realized_strategy ?? 0, (b.realized_strategy ?? 0) >= 0 ? "#00a858" : "#ff4455", "signed"],
+                [`Realized dedupe${b.n_dedupe_trades ? ` (${b.n_dedupe_trades})` : ""}`, b.realized_dedupe ?? 0, (b.realized_dedupe ?? 0) >= 0 ? "#00a858" : "#ff4455", "signed"],
+              ];
+              return rows.map(([label, val, color, fmt]) => (
+                <div key={label} style={{display:"flex",justifyContent:"space-between",padding:"2px 0",fontSize:7,borderBottom:"1px solid #09090d"}}>
+                  <span style={{color:"#c8d8e0",letterSpacing:".02em"}}>{label}</span>
+                  <span style={{color, fontWeight:500}}>
+                    {fmt === "signed" ? `${sign(val)}${fmt$(Math.abs(val))}` : fmt$(val)}
+                  </span>
+                </div>
+              ));
+            })()}
           </div>
 
           <div>
