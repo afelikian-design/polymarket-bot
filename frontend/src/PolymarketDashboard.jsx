@@ -104,6 +104,10 @@ export default function Dashboard() {
   const [cityStats,   setCityStats]   = useState([]);
   const [pnlSeries,   setPnlSeries]   = useState([]);
   const [scanner,     setScanner]     = useState({status:"unknown",message:"Loading...",signals_24h:0});
+  const [forecastMarkets, setForecastMarkets] = useState([]);
+  const [selectedMarket, setSelectedMarket] = useState("");
+  const [distribution, setDistribution] = useState(null);
+  const [evolution, setEvolution] = useState(null);
   const [activity,    setActivity]    = useState([]);
   const [showRealized, setShowRealized] = useState(false);
   const [prevActivityId, setPrevActivityId] = useState(null);
@@ -120,7 +124,7 @@ export default function Dashboard() {
   useEffect(()=>{
     const fetchData = async () => {
       try {
-        const [port,sigs,res,pp,pt,pb,cal,cs,scan] = await Promise.all([
+        const [port,sigs,res,pp,pt,pb,cal,cs,scan,fm] = await Promise.all([
           fetch(`${API_BASE}/api/paper/portfolio`).then(r=>r.json()),
           fetch(`${API_BASE}/api/weather/signals`).then(r=>r.json()),
           fetch(`${API_BASE}/api/weather/results`).then(r=>r.json()),
@@ -130,6 +134,7 @@ export default function Dashboard() {
           fetch(`${API_BASE}/api/weather/calibration`).then(r=>r.json()),
           fetch(`${API_BASE}/api/weather/city_stats`).then(r=>r.json()),
           fetch(`${API_BASE}/api/weather/scanner_status`).then(r=>r.json()),
+          fetch(`${API_BASE}/api/weather/forecast_markets`).then(r=>r.json()),
         ]);
         setPortfolio(port);
         setSignals(sigs||[]);
@@ -148,13 +153,64 @@ export default function Dashboard() {
         if (chartData.length === 0) chartData.push({time:"start",balance:1000,realized:1000});
         setPnlSeries(chartData);
         setScanner(scan||{status:"unknown",message:"No data"});
+        setForecastMarkets(fm||[]);
+        // Auto-select first market on initial load if none selected
+        if (fm && fm.length > 0 && !selectedMarket) {
+          setSelectedMarket(`${fm[0].city}|${fm[0].target_date}`);
+        }
         setApiError(false);
       } catch(e){ setApiError(true); }
     };
     fetchData();
     const interval = setInterval(fetchData, 15000);  // 15s polling
     return()=>clearInterval(interval);
-  },[]);
+  },[selectedMarket]);
+
+  // ── Fetch distribution when selectedMarket changes ─────────────
+  useEffect(()=>{
+    if (!selectedMarket) return;
+    const [city, date] = selectedMarket.split("|");
+    const fetchDist = async () => {
+      try {
+        const r = await fetch(`${API_BASE}/api/weather/forecast_distribution?city=${encodeURIComponent(city)}&date=${encodeURIComponent(date)}`);
+        const data = await r.json();
+        setDistribution(data);
+      } catch(e){}
+    };
+    fetchDist();
+    const interval = setInterval(fetchDist, 30000);
+    return ()=>clearInterval(interval);
+  },[selectedMarket]);
+
+  // ── Fetch evolution: auto-focus on first open position or first market ─
+  useEffect(()=>{
+    const fetchEvol = async () => {
+      try {
+        let city, date, bucket;
+        if (paperPositions.length > 0) {
+          const pos = paperPositions[0];
+          city = pos.city;
+          date = pos.target_date;
+          bucket = pos.bucket;
+        } else if (selectedMarket && distribution && distribution.buckets?.length > 0) {
+          const [c, d] = selectedMarket.split("|");
+          city = c;
+          date = d;
+          // Pick highest-edge bucket
+          const best = [...distribution.buckets].sort((a,b) => Math.abs(b.edge_yes) - Math.abs(a.edge_yes))[0];
+          bucket = best.bucket;
+        } else {
+          return;
+        }
+        const r = await fetch(`${API_BASE}/api/weather/forecast_evolution?city=${encodeURIComponent(city)}&date=${encodeURIComponent(date)}&bucket=${encodeURIComponent(bucket)}`);
+        const data = await r.json();
+        setEvolution(data);
+      } catch(e){}
+    };
+    fetchEvol();
+    const interval = setInterval(fetchEvol, 30000);
+    return ()=>clearInterval(interval);
+  },[paperPositions, selectedMarket, distribution]);
 
   // ── Activity feed ─────────────────────────────────────────────
   useEffect(()=>{
@@ -776,33 +832,132 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {/* RIGHT — ACTIVITY */}
+        {/* RIGHT — FORECAST VISUALIZATIONS */}
         <div style={{background:"#070a0d",borderLeft:"1px solid #0c1c28",display:"flex",flexDirection:"column",overflow:"hidden"}}>
-          <div style={{display:"flex",alignItems:"center",gap:8,padding:"7px 12px",borderBottom:"1px solid #0c1c28",flexShrink:0}}>
-            <div style={{width:6,height:6,borderRadius:"50%",background:newActivity?"#00ff8c":"#304858",boxShadow:newActivity?"0 0 7px #00ff8c":"none",transition:"all .3s"}} className={newActivity?"pulse":""}/>
-            <span style={{fontSize:8,color:"#8ab8c8",letterSpacing:".2em"}}>ACTIVITY FEED</span>
-            <span style={{fontSize:8,color:"#304858"}}>· every 5s</span>
-          </div>
-          <div ref={activityRef} style={{overflowY:"auto",flex:1,minHeight:0,padding:"4px 0"}}>
-            {activity.length===0?(
-              <div style={{padding:"16px 14px",color:"#304858",fontSize:10,textAlign:"center"}}>Waiting for activity...</div>
-            ):activity.map((log,i)=>{
-              const et=ET[log.event_type]||ET.SCANNING;
-              return(
-                <div key={log.id} className={i===0&&newActivity?"flashrow":""} style={{padding:"6px 10px",borderBottom:"1px solid #0a0c10"}}>
-                  <div style={{display:"flex",alignItems:"center",gap:4,marginBottom:1}}>
-                    <span style={{fontSize:6,padding:"1px 4px",borderRadius:2,background:et.color+"18",color:et.color,whiteSpace:"nowrap",flexShrink:0,fontWeight:700}}>{et.icon} {et.label}</span>
-                    <span style={{fontSize:6,color:"#243848",flexShrink:0}}>{log.logged_at?new Date(log.logged_at).toLocaleTimeString("en-US",{timeZone:"America/Los_Angeles",hour:"2-digit",minute:"2-digit"}):""}</span>
-                    <span style={{fontSize:6,color:"#243848",marginLeft:"auto",flexShrink:0}}>{log.time_ago}</span>
+
+          {/* DISTRIBUTION CHART — top */}
+          <div style={{flex:"0 0 auto",padding:"10px 12px",borderBottom:"1px solid #0c1c28",overflow:"hidden",display:"flex",flexDirection:"column"}}>
+            <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}>
+              <span style={{fontSize:8,color:"#8ab8c8",letterSpacing:".2em"}}>MODEL vs MARKET</span>
+              <span style={{fontSize:8,color:"#304858"}}>· the edge</span>
+            </div>
+            {/* Market selector */}
+            <div style={{display:"flex",gap:4,marginBottom:10}}>
+              <select
+                value={selectedMarket}
+                onChange={e=>setSelectedMarket(e.target.value)}
+                style={{flex:1,background:"#0a0d12",border:"1px solid #0c1c28",color:"#c8d8e0",fontSize:9,padding:"4px 6px",borderRadius:3,fontFamily:"inherit",letterSpacing:".08em"}}
+              >
+                {forecastMarkets.length === 0 && <option value="">Loading...</option>}
+                {forecastMarkets.map(m => (
+                  <option key={`${m.city}|${m.target_date}`} value={`${m.city}|${m.target_date}`}>
+                    {m.city} · {m.target_date} · mean {m.ensemble_mean?.toFixed(1)}°F
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Distribution bars */}
+            {(!distribution || !distribution.buckets || distribution.buckets.length === 0) ? (
+              <div style={{fontSize:9,color:"#4a6070",textAlign:"center",padding:"16px 0"}}>
+                No forecast data yet for this market
+              </div>
+            ) : (
+              <div style={{fontSize:8}}>
+                {distribution.buckets.map((b,i) => {
+                  const modelPct = b.ensemble_prob * 100;
+                  const marketPct = b.yes_price * 100;
+                  const edge = (b.ensemble_prob - b.yes_price) * 100;
+                  const edgeColor = Math.abs(edge) < 5 ? "#4a6070" : (edge > 0 ? "#00ff8c" : "#ff6070");
+                  const maxBar = Math.max(100, Math.max(modelPct, marketPct) * 1.05);
+                  return (
+                    <div key={i} style={{marginBottom:5}}>
+                      <div style={{display:"flex",justifyContent:"space-between",marginBottom:2}}>
+                        <span style={{color:"#c8d8e0",fontSize:8,fontWeight:500}}>{b.bucket}</span>
+                        <span style={{color:edgeColor,fontSize:8,fontWeight:600}}>
+                          {edge>=0?"+":""}{edge.toFixed(1)}pp
+                        </span>
+                      </div>
+                      {/* Model bar */}
+                      <div style={{display:"flex",alignItems:"center",gap:4,marginBottom:1}}>
+                        <span style={{fontSize:6,color:"#4a6070",width:20}}>MDL</span>
+                        <div style={{flex:1,height:6,background:"#0c1c28",borderRadius:2,position:"relative"}}>
+                          <div style={{width:`${(modelPct/maxBar)*100}%`,height:6,background:"#80c8e0",borderRadius:2}}/>
+                        </div>
+                        <span style={{fontSize:7,color:"#80c8e0",width:30,textAlign:"right",fontWeight:500}}>{modelPct.toFixed(1)}%</span>
+                      </div>
+                      {/* Market bar */}
+                      <div style={{display:"flex",alignItems:"center",gap:4}}>
+                        <span style={{fontSize:6,color:"#4a6070",width:20}}>MKT</span>
+                        <div style={{flex:1,height:6,background:"#0c1c28",borderRadius:2,position:"relative"}}>
+                          <div style={{width:`${(marketPct/maxBar)*100}%`,height:6,background:"#f0c070",borderRadius:2}}/>
+                        </div>
+                        <span style={{fontSize:7,color:"#f0c070",width:30,textAlign:"right",fontWeight:500}}>{marketPct.toFixed(1)}%</span>
+                      </div>
+                    </div>
+                  );
+                })}
+                {distribution.ensemble_mean > 0 && (
+                  <div style={{marginTop:6,paddingTop:6,borderTop:"1px solid #0c1c28",display:"flex",justifyContent:"space-between",fontSize:7,color:"#8ab8c8"}}>
+                    <span>Mean: <span style={{color:"#fff"}}>{distribution.ensemble_mean?.toFixed(1)}°F</span></span>
+                    <span>σ: <span style={{color:"#fff"}}>{distribution.ensemble_std?.toFixed(2)}°F</span></span>
+                    <span>{distribution.n_members} members</span>
+                    <span>{distribution.lead_hours?.toFixed(0)}h lead</span>
                   </div>
-                  {log.market&&<div style={{fontSize:8,color:"#8ab8c8",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",marginBottom:1,fontWeight:600}}>{log.market}</div>}
-                  <div style={{fontSize:8,color:et.color==="#4a5868"?"#506070":"#c8d8e0",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{log.message}</div>
-                  {log.detail&&<div style={{fontSize:7,color:"#3a5060",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",marginTop:1}}>{log.detail}</div>}
-                </div>
-              );
-            })}
+                )}
+              </div>
+            )}
           </div>
-          <div style={{padding:"10px 12px",borderTop:"1px solid #0c1c28",flexShrink:0}}>
+
+          {/* EVOLUTION CHART — middle */}
+          <div style={{flex:"1 1 auto",padding:"10px 12px",borderBottom:"1px solid #0c1c28",minHeight:0,display:"flex",flexDirection:"column"}}>
+            <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:6}}>
+              <span style={{fontSize:8,color:"#8ab8c8",letterSpacing:".2em"}}>EDGE EVOLUTION</span>
+              <span style={{fontSize:8,color:"#304858"}}>· is it holding?</span>
+            </div>
+            {(!evolution || !evolution.series || evolution.series.length < 2) ? (
+              <div style={{fontSize:9,color:"#4a6070",textAlign:"center",padding:"16px 0"}}>
+                {evolution && evolution.series?.length === 1 ? "Need more scans" : "Open a position to see evolution"}
+              </div>
+            ) : (
+              <div style={{flex:1,display:"flex",flexDirection:"column",minHeight:0}}>
+                <div style={{fontSize:8,color:"#c8d8e0",marginBottom:4}}>
+                  <span style={{color:CITIES[evolution.city]?.color||"#fff",fontWeight:600}}>{evolution.city}</span>
+                  {" "}<span>{evolution.bucket}</span>
+                  <span style={{color:"#4a6070",marginLeft:6}}>· {evolution.target_date}</span>
+                </div>
+                <div style={{flex:1,minHeight:0}}>
+                  <ResponsiveContainer width="100%" height="100%">
+                    <LineChart data={evolution.series.map(s=>({
+                      time: new Date(s.ts).toLocaleTimeString("en-US",{timeZone:"America/Los_Angeles",hour:"numeric",minute:"2-digit"}),
+                      model: s.ensemble_prob * 100,
+                      market: s.yes_price * 100,
+                    }))} margin={{top:4,right:2,bottom:0,left:0}}>
+                      <XAxis dataKey="time" tick={{fill:"#4a6070",fontSize:7}} axisLine={false} tickLine={false} interval="preserveStartEnd"/>
+                      <YAxis tick={{fill:"#4a6070",fontSize:7}} axisLine={false} tickLine={false} width={28} tickFormatter={v=>`${v.toFixed(0)}%`} domain={[0,"auto"]}/>
+                      <Tooltip contentStyle={{background:"#0b0e14",border:"1px solid #0c1c28",borderRadius:3,fontSize:9}} labelStyle={{color:"#c8d8e0"}} formatter={(v,name)=>[`${v.toFixed(1)}%`, name==="model"?"Model":"Market"]}/>
+                      <Line type="monotone" dataKey="model" stroke="#80c8e0" strokeWidth={1.5} dot={false} activeDot={{r:3,fill:"#80c8e0"}}/>
+                      <Line type="monotone" dataKey="market" stroke="#f0c070" strokeWidth={1.5} dot={false} activeDot={{r:3,fill:"#f0c070"}}/>
+                    </LineChart>
+                  </ResponsiveContainer>
+                </div>
+                <div style={{display:"flex",gap:10,marginTop:4,fontSize:7,color:"#8ab8c8"}}>
+                  <span style={{display:"flex",alignItems:"center",gap:3}}>
+                    <span style={{width:8,height:2,background:"#80c8e0",display:"inline-block"}}/>
+                    Model
+                  </span>
+                  <span style={{display:"flex",alignItems:"center",gap:3}}>
+                    <span style={{width:8,height:2,background:"#f0c070",display:"inline-block"}}/>
+                    Market
+                  </span>
+                  <span style={{marginLeft:"auto",color:"#4a6070"}}>{evolution.n_snapshots} scans</span>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* CITY SIGNALS — bottom (preserved) */}
+          <div style={{padding:"10px 12px",flexShrink:0}}>
             <div style={{fontSize:7,color:"#4a6070",letterSpacing:".18em",marginBottom:8}}>OPEN SIGNALS BY CITY</div>
             {CITY_LIST.map(city=>{
               const stat = cityStats.find(s=>s.city===city) || {open_count:0,open_stake:0};

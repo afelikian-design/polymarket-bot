@@ -565,3 +565,134 @@ def paper_portfolio():
         "drawdown_pct":     0.0,
         "paper_trading":    True,
     })
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# FORECAST VISUALIZATION ENDPOINTS
+# ─────────────────────────────────────────────────────────────────────────────
+
+@app.route("/api/weather/forecast_markets")
+def forecast_markets():
+    """List available (city, target_date) pairs from forecast history.
+       Powers the dropdown selector in the distribution chart."""
+    rows = _read_csv(os.path.join(WEATHER_DIR, "forecast_history.csv"))
+    if not rows:
+        return jsonify([])
+
+    # Get latest ts per (city, target_date), sorted by date
+    today = datetime.utcnow().date().isoformat()
+    seen = {}
+    for r in rows:
+        key = (r.get("city"), r.get("target_date"))
+        ts = r.get("ts", "")
+        if key not in seen or ts > seen[key]["latest_ts"]:
+            seen[key] = {
+                "city":        r.get("city"),
+                "target_date": r.get("target_date"),
+                "latest_ts":   ts,
+                "ensemble_mean": _fnum(r.get("ensemble_mean")),
+                "n_members":   _fint(r.get("n_members")),
+            }
+
+    # Filter to future + today, sort by date asc
+    out = sorted(
+        [v for v in seen.values() if v["target_date"] >= today],
+        key=lambda x: (x["target_date"], x["city"])
+    )
+    return jsonify(out)
+
+
+@app.route("/api/weather/forecast_distribution")
+def forecast_distribution():
+    """Latest ensemble probability + market price for each bucket of one city+date.
+       Query params: ?city=NYC&date=2026-04-23"""
+    from flask import request
+    city = request.args.get("city", "")
+    target_date = request.args.get("date", "")
+
+    rows = _read_csv(os.path.join(WEATHER_DIR, "forecast_history.csv"))
+    if not rows:
+        return jsonify({"city": city, "target_date": target_date, "buckets": []})
+
+    # Filter to this city+date, keep latest per bucket
+    latest_per_bucket = {}
+    for r in rows:
+        if r.get("city") != city or r.get("target_date") != target_date:
+            continue
+        bucket = r.get("bucket", "")
+        ts = r.get("ts", "")
+        if bucket not in latest_per_bucket or ts > latest_per_bucket[bucket].get("ts", ""):
+            latest_per_bucket[bucket] = r
+
+    # Sort buckets by bucket_lo
+    buckets = sorted(
+        latest_per_bucket.values(),
+        key=lambda r: _fnum(r.get("bucket_lo"))
+    )
+
+    out = []
+    for r in buckets:
+        out.append({
+            "bucket":         r.get("bucket"),
+            "bucket_lo":      _fnum(r.get("bucket_lo")),
+            "bucket_hi":      _fnum(r.get("bucket_hi")),
+            "ensemble_prob":  _fnum(r.get("ensemble_prob")),
+            "yes_price":      _fnum(r.get("yes_price")),
+            "no_price":       _fnum(r.get("no_price")),
+            "edge_yes":       round(_fnum(r.get("ensemble_prob")) - _fnum(r.get("yes_price")), 4),
+            "n_models_agree": _fint(r.get("n_models_agree")),
+        })
+
+    latest_ts = max((r.get("ts", "") for r in latest_per_bucket.values()), default="")
+    latest_row = latest_per_bucket.get(list(latest_per_bucket.keys())[0]) if latest_per_bucket else {}
+
+    return jsonify({
+        "city":          city,
+        "target_date":   target_date,
+        "latest_ts":     latest_ts,
+        "ensemble_mean": _fnum(latest_row.get("ensemble_mean")),
+        "ensemble_std":  _fnum(latest_row.get("ensemble_std")),
+        "n_members":     _fint(latest_row.get("n_members")),
+        "lead_hours":    _fnum(latest_row.get("lead_hours")),
+        "buckets":       out,
+    })
+
+
+@app.route("/api/weather/forecast_evolution")
+def forecast_evolution():
+    """Time series of ensemble prob + market price for one bucket.
+       Query params: ?city=Chicago&date=2026-04-24&bucket=68-69°F"""
+    from flask import request
+    city = request.args.get("city", "")
+    target_date = request.args.get("date", "")
+    bucket = request.args.get("bucket", "")
+
+    rows = _read_csv(os.path.join(WEATHER_DIR, "forecast_history.csv"))
+    if not rows:
+        return jsonify({"city": city, "target_date": target_date, "bucket": bucket, "series": []})
+
+    # Filter + sort by ts
+    filt = [
+        r for r in rows
+        if r.get("city") == city
+        and r.get("target_date") == target_date
+        and r.get("bucket") == bucket
+    ]
+    filt.sort(key=lambda r: r.get("ts", ""))
+
+    series = [{
+        "ts":              r.get("ts"),
+        "ensemble_prob":   _fnum(r.get("ensemble_prob")),
+        "yes_price":       _fnum(r.get("yes_price")),
+        "no_price":        _fnum(r.get("no_price")),
+        "n_models_agree":  _fint(r.get("n_models_agree")),
+        "lead_hours":      _fnum(r.get("lead_hours")),
+    } for r in filt]
+
+    return jsonify({
+        "city":        city,
+        "target_date": target_date,
+        "bucket":      bucket,
+        "n_snapshots": len(series),
+        "series":      series,
+    })
