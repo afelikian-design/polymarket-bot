@@ -108,6 +108,7 @@ export default function Dashboard() {
   const [selectedMarket, setSelectedMarket] = useState("");
   const [distribution, setDistribution] = useState(null);
   const [evolution, setEvolution] = useState(null);
+  const [analyzer, setAnalyzer] = useState(null);
   const [activity,    setActivity]    = useState([]);
   const [showRealized, setShowRealized] = useState(false);
   const [prevActivityId, setPrevActivityId] = useState(null);
@@ -211,6 +212,21 @@ export default function Dashboard() {
     const interval = setInterval(fetchEvol, 30000);
     return ()=>clearInterval(interval);
   },[paperPositions, selectedMarket, distribution]);
+
+  // ── Strategy analyzer: fetch latest report ─────────────────────
+  useEffect(()=>{
+    const fetchAnalyzer = async () => {
+      try {
+        const r = await fetch(`${API_BASE}/api/strategy/latest`);
+        const data = await r.json();
+        setAnalyzer(data);
+      } catch(e){}
+    };
+    fetchAnalyzer();
+    // Refresh every 5 min — analyzer runs twice daily so no need to be aggressive
+    const interval = setInterval(fetchAnalyzer, 300000);
+    return ()=>clearInterval(interval);
+  },[]);
 
   // ── Activity feed ─────────────────────────────────────────────
   useEffect(()=>{
@@ -965,49 +981,107 @@ export default function Dashboard() {
             )}
           </div>
 
-          {/* EVOLUTION CHART — middle */}
-          <div style={{flex:"1 1 auto",padding:"10px 12px",borderBottom:"1px solid #0c1c28",minHeight:0,display:"flex",flexDirection:"column"}}>
-            <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:6}}>
-              <span style={{fontSize:8,color:"#8ab8c8",letterSpacing:".2em"}}>EDGE EVOLUTION</span>
-              <span style={{fontSize:8,color:"#304858"}}>· is it holding?</span>
+          {/* STRATEGY ANALYZER — middle */}
+          <div style={{flex:"1 1 auto",padding:"10px 12px",borderBottom:"1px solid #0c1c28",minHeight:0,display:"flex",flexDirection:"column",overflow:"hidden"}}>
+            <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:6,flexShrink:0}}>
+              <span style={{fontSize:8,color:"#8ab8c8",letterSpacing:".2em"}}>STRATEGY ANALYZER</span>
+              <span style={{fontSize:8,color:"#304858"}}>· {analyzer?.available ? `2x daily` : `pending`}</span>
+              {analyzer?.ts && (
+                <span style={{fontSize:7,color:"#4a6070",marginLeft:"auto"}}>
+                  {new Date(analyzer.ts).toLocaleString("en-US",{timeZone:"America/Los_Angeles",month:"short",day:"numeric",hour:"numeric",minute:"2-digit"})}
+                </span>
+              )}
             </div>
-            {(!evolution || !evolution.series || evolution.series.length < 2) ? (
+
+            {!analyzer?.available ? (
               <div style={{fontSize:9,color:"#4a6070",textAlign:"center",padding:"16px 0"}}>
-                {evolution && evolution.series?.length === 1 ? "Need more scans" : "Open a position to see evolution"}
+                {analyzer?.message || "First analysis scheduled at 6:45 AM Pacific after daily reconcile."}
               </div>
             ) : (
-              <div style={{flex:1,display:"flex",flexDirection:"column",minHeight:0}}>
-                <div style={{fontSize:8,color:"#c8d8e0",marginBottom:4}}>
-                  <span style={{color:CITIES[evolution.city]?.color||"#fff",fontWeight:600}}>{evolution.city}</span>
-                  {" "}<span>{evolution.bucket}</span>
-                  <span style={{color:"#4a6070",marginLeft:6}}>· {evolution.target_date}</span>
-                </div>
-                <div style={{flex:1,minHeight:0}}>
-                  <ResponsiveContainer width="100%" height="100%">
-                    <LineChart data={evolution.series.map(s=>({
-                      time: new Date(s.ts).toLocaleTimeString("en-US",{timeZone:"America/Los_Angeles",hour:"numeric",minute:"2-digit"}),
-                      model: s.ensemble_prob * 100,
-                      market: s.yes_price * 100,
-                    }))} margin={{top:4,right:2,bottom:0,left:0}}>
-                      <XAxis dataKey="time" tick={{fill:"#4a6070",fontSize:7}} axisLine={false} tickLine={false} interval="preserveStartEnd"/>
-                      <YAxis tick={{fill:"#4a6070",fontSize:7}} axisLine={false} tickLine={false} width={28} tickFormatter={v=>`${v.toFixed(0)}%`} domain={[0,"auto"]}/>
-                      <Tooltip contentStyle={{background:"#0b0e14",border:"1px solid #0c1c28",borderRadius:3,fontSize:9}} labelStyle={{color:"#c8d8e0"}} formatter={(v,name)=>[`${v.toFixed(1)}%`, name==="model"?"Model":"Market"]}/>
-                      <Line type="monotone" dataKey="model" stroke="#80c8e0" strokeWidth={1.5} dot={false} activeDot={{r:3,fill:"#80c8e0"}}/>
-                      <Line type="monotone" dataKey="market" stroke="#f0c070" strokeWidth={1.5} dot={false} activeDot={{r:3,fill:"#f0c070"}}/>
-                    </LineChart>
-                  </ResponsiveContainer>
-                </div>
-                <div style={{display:"flex",gap:10,marginTop:4,fontSize:7,color:"#8ab8c8"}}>
-                  <span style={{display:"flex",alignItems:"center",gap:3}}>
-                    <span style={{width:8,height:2,background:"#80c8e0",display:"inline-block"}}/>
-                    Model
-                  </span>
-                  <span style={{display:"flex",alignItems:"center",gap:3}}>
-                    <span style={{width:8,height:2,background:"#f0c070",display:"inline-block"}}/>
-                    Market
-                  </span>
-                  <span style={{marginLeft:"auto",color:"#4a6070"}}>{evolution.n_snapshots} scans</span>
-                </div>
+              <div style={{flex:1,overflowY:"auto",minHeight:0,paddingRight:4}}>
+                {/* Metrics block */}
+                {analyzer.metrics?.overall && (
+                  <div style={{background:"#0a0d12",border:"1px solid #0c1c28",borderRadius:3,padding:"8px 10px",marginBottom:8}}>
+                    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:6,fontSize:8}}>
+                      <div>
+                        <div style={{color:"#4a6070",fontSize:7,letterSpacing:".14em"}}>ROI</div>
+                        <div style={{color:(analyzer.metrics.overall.roi_pct||0)>=0?"#00ff8c":"#ff4455",fontSize:11,fontWeight:600}}>
+                          {(analyzer.metrics.overall.roi_pct||0)>=0?"+":""}{(analyzer.metrics.overall.roi_pct||0).toFixed(1)}%
+                        </div>
+                      </div>
+                      <div>
+                        <div style={{color:"#4a6070",fontSize:7,letterSpacing:".14em"}}>WIN RATE</div>
+                        <div style={{color:"#fff",fontSize:11,fontWeight:600}}>
+                          {(analyzer.metrics.overall.win_rate||0).toFixed(0)}%
+                        </div>
+                      </div>
+                      <div>
+                        <div style={{color:"#4a6070",fontSize:7,letterSpacing:".14em"}}>TRADES</div>
+                        <div style={{color:"#fff",fontSize:11,fontWeight:600}}>
+                          {analyzer.metrics.overall.n_trades||0}
+                        </div>
+                      </div>
+                    </div>
+                    {analyzer.metrics.by_city && (
+                      <div style={{marginTop:6,paddingTop:6,borderTop:"1px solid #0c1c28"}}>
+                        <div style={{color:"#4a6070",fontSize:7,letterSpacing:".14em",marginBottom:3}}>BY CITY</div>
+                        {Object.entries(analyzer.metrics.by_city).map(([city, s]) => (
+                          <div key={city} style={{display:"flex",justifyContent:"space-between",fontSize:8,padding:"1px 0"}}>
+                            <span style={{color:CITIES[city]?.color||"#c8d8e0"}}>{city}</span>
+                            <span style={{color:"#8ab8c8"}}>
+                              {s.n} trades · <span style={{color:(s.roi_pct||0)>=0?"#00a858":"#ff4455"}}>
+                                {(s.roi_pct||0)>=0?"+":""}{(s.roi_pct||0).toFixed(1)}%
+                              </span>
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Summary */}
+                {analyzer.summary && (
+                  <div style={{fontSize:9,color:"#c8d8e0",lineHeight:1.5,marginBottom:8,padding:"6px 8px",background:"#0a0d12",borderLeft:"2px solid #00ff8c",borderRadius:2}}>
+                    {analyzer.summary}
+                  </div>
+                )}
+
+                {/* Warnings */}
+                {analyzer.warnings?.length > 0 && (
+                  <div style={{marginBottom:8}}>
+                    <div style={{fontSize:7,color:"#e07888",letterSpacing:".18em",marginBottom:3}}>WARNINGS</div>
+                    {analyzer.warnings.map((w,i) => (
+                      <div key={i} style={{fontSize:8,color:"#e07888",lineHeight:1.4,padding:"2px 6px",marginBottom:2,background:"#0a0d12",borderLeft:"2px solid #e07888",borderRadius:2}}>
+                        {w}
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Observations */}
+                {analyzer.observations?.length > 0 && (
+                  <div style={{marginBottom:8}}>
+                    <div style={{fontSize:7,color:"#8ab8c8",letterSpacing:".18em",marginBottom:3}}>OBSERVATIONS</div>
+                    {analyzer.observations.map((o,i) => (
+                      <div key={i} style={{fontSize:8,color:"#c8d8e0",lineHeight:1.4,padding:"2px 6px",marginBottom:2,background:"#0a0d12",borderLeft:"2px solid #80c8e0",borderRadius:2}}>
+                        {o}
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Recommendations */}
+                {analyzer.recommendations?.length > 0 && (
+                  <div>
+                    <div style={{fontSize:7,color:"#f0c070",letterSpacing:".18em",marginBottom:3}}>RECOMMENDATIONS</div>
+                    {analyzer.recommendations.map((r,i) => (
+                      <div key={i} style={{fontSize:8,color:"#f0c070",lineHeight:1.4,padding:"2px 6px",marginBottom:2,background:"#0a0d12",borderLeft:"2px solid #f0c070",borderRadius:2}}>
+                        {r}
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             )}
           </div>

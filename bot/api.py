@@ -7,6 +7,7 @@ from database import (init_db, Position, Trade, AgentLog,
 from datetime import datetime, timedelta
 import os
 import csv
+import json
 
 app = Flask(__name__)
 CORS(app)
@@ -737,3 +738,71 @@ def forecast_evolution():
         "n_snapshots": len(series),
         "series":      series,
     })
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# STRATEGY ANALYZER ENDPOINTS
+# ─────────────────────────────────────────────────────────────────────────────
+
+@app.route("/api/strategy/latest")
+def strategy_latest():
+    """Return the most recent analyzer report with metrics + narrative."""
+    rows = _read_csv(os.path.join(WEATHER_DIR, "analyzer_reports.csv"))
+    if not rows:
+        return jsonify({
+            "available": False,
+            "message": "No analyzer reports yet. First run at 13:45 UTC or 01:00 UTC.",
+        })
+
+    latest = rows[-1]
+    try:
+        metrics = json.loads(latest.get("metrics_json", "{}"))
+    except Exception:
+        metrics = {}
+    try:
+        observations = json.loads(latest.get("observations", "[]"))
+    except Exception:
+        observations = []
+    try:
+        warnings_list = json.loads(latest.get("warnings", "[]"))
+    except Exception:
+        warnings_list = []
+    try:
+        recommendations = json.loads(latest.get("recommendations", "[]"))
+    except Exception:
+        recommendations = []
+
+    return jsonify({
+        "available":       True,
+        "ts":              latest.get("ts"),
+        "summary":         latest.get("summary", ""),
+        "observations":    observations,
+        "warnings":        warnings_list,
+        "recommendations": recommendations,
+        "metrics":         metrics,
+        "n_reports":       len(rows),
+    })
+
+
+@app.route("/api/strategy/history")
+def strategy_history():
+    """Return last 14 analyzer reports for trend view."""
+    rows = _read_csv(os.path.join(WEATHER_DIR, "analyzer_reports.csv"))
+    if not rows:
+        return jsonify([])
+
+    recent = rows[-14:]
+    out = []
+    for r in recent:
+        try:
+            metrics = json.loads(r.get("metrics_json", "{}"))
+        except Exception:
+            metrics = {}
+        out.append({
+            "ts":      r.get("ts"),
+            "summary": r.get("summary", ""),
+            "roi_pct": metrics.get("overall", {}).get("roi_pct", 0),
+            "win_rate": metrics.get("overall", {}).get("win_rate", 0),
+            "n_trades": metrics.get("overall", {}).get("n_trades", 0),
+        })
+    return jsonify(out)
