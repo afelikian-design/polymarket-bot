@@ -436,7 +436,10 @@ export default function Dashboard() {
                       <CityBadge city={p.city}/>
                       <DirectionBadge dir={p.direction}/>
                       <span style={{fontSize:10,color:"#c8d8e0",fontWeight:600}}>{p.bucket}</span>
-                      <span style={{fontSize:9,color:"#4a6070",marginLeft:"auto"}}>{p.target_date}</span>
+                      <span style={{fontSize:9,color:"#4a6070",marginLeft:"auto"}}>tgt {p.target_date}</span>
+                    </div>
+                    <div style={{fontSize:8,color:"#4a6070",marginBottom:6}}>
+                      Opened {p.opened_at?new Date(p.opened_at).toLocaleString("en-US",{month:"numeric",day:"numeric",hour:"numeric",minute:"2-digit",hour12:true}):"—"}
                     </div>
                     <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8,marginBottom:6}}>
                       {[
@@ -511,7 +514,10 @@ export default function Dashboard() {
                     <CityBadge city={t.city}/>
                     <DirectionBadge dir={t.direction}/>
                     <span style={{fontSize:10,color:"#c8d8e0"}}>{t.bucket}</span>
-                    <span style={{fontSize:9,color:"#4a6070",marginLeft:"auto"}}>{t.closed_at?new Date(t.closed_at).toLocaleDateString("en-US",{month:"numeric",day:"numeric"}):""}</span>
+                  </div>
+                  <div style={{fontSize:8,color:"#4a6070",marginBottom:6,display:"flex",justifyContent:"space-between"}}>
+                    <span>Open {t.opened_at?new Date(t.opened_at).toLocaleString("en-US",{month:"numeric",day:"numeric",hour:"numeric",minute:"2-digit",hour12:true}):"—"}</span>
+                    <span>Close {t.closed_at?new Date(t.closed_at).toLocaleString("en-US",{month:"numeric",day:"numeric",hour:"numeric",minute:"2-digit",hour12:true}):"—"}</span>
                   </div>
                   <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:4}}>
                     <div style={{fontSize:10,color:"#8ab8c8"}}>
@@ -785,7 +791,7 @@ export default function Dashboard() {
             {desktopTab==="positions"&&(paperPositions.length===0?<div style={{padding:"40px",textAlign:"center",color:"#8ab8c8",fontSize:11}}>No open positions. Waiting for scanner to fire.</div>:(
               <table style={{width:"100%",borderCollapse:"collapse",fontSize:9}}>
                 <thead style={{background:"#070a0d",position:"sticky",top:0}}>
-                  <tr>{["CITY","BUCKET","DIR","MODEL %","FILL","NOW","STAKE","UNRLZD","%","TGT DATE"].map(h=>(<th key={h} style={{padding:"6px 10px",textAlign:"left",color:"#8ab8c8",fontSize:7,letterSpacing:".12em",fontWeight:400,borderBottom:"1px solid #0c1c28",whiteSpace:"nowrap"}}>{h}</th>))}</tr>
+                  <tr>{["CITY","BUCKET","DIR","MODEL %","FILL","NOW","STAKE","UNRLZD","%","ENTRY","TGT DATE"].map(h=>(<th key={h} style={{padding:"6px 10px",textAlign:"left",color:"#8ab8c8",fontSize:7,letterSpacing:".12em",fontWeight:400,borderBottom:"1px solid #0c1c28",whiteSpace:"nowrap"}}>{h}</th>))}</tr>
                 </thead>
                 <tbody>{paperPositions.map((p,i)=>{
                   const pnlPct = p.stake_usd > 0 ? (p.unrealized_pnl / p.stake_usd * 100) : 0;
@@ -800,6 +806,7 @@ export default function Dashboard() {
                       <td style={{padding:"8px 10px",color:"#f0c070"}}>{fmt$(p.stake_usd)}</td>
                       <td style={{padding:"8px 10px",fontWeight:500,color:p.unrealized_pnl>=0?"#00a858":"#ff4455"}}>{sign(p.unrealized_pnl)}{fmt$(Math.abs(p.unrealized_pnl))}</td>
                       <td style={{padding:"8px 10px",color:pnlPct>=0?"#00a858":"#ff4455",fontWeight:500}}>{sign(pnlPct)}{Math.abs(pnlPct).toFixed(1)}%</td>
+                      <td style={{padding:"8px 10px",color:"#8ab8c8",fontSize:8,whiteSpace:"nowrap"}}>{p.opened_at?new Date(p.opened_at).toLocaleString("en-US",{month:"numeric",day:"numeric",hour:"numeric",minute:"2-digit",hour12:true}):"—"}</td>
                       <td style={{padding:"8px 10px",color:"#8ab8c8",fontSize:8}}>{p.target_date}</td>
                     </tr>
                   );
@@ -833,13 +840,15 @@ export default function Dashboard() {
             {desktopTab==="trades"&&(paperTrades.length===0?<div style={{padding:"40px",textAlign:"center",color:"#8ab8c8",fontSize:11}}>No closed paper trades yet. Positions resolve at noon UTC or when stop/target hits.</div>:(
               <table style={{width:"100%",borderCollapse:"collapse",fontSize:9}}>
                 <thead style={{background:"#070a0d",position:"sticky",top:0}}>
-                  <tr>{["CLOSED","CITY","BUCKET","DIR","FILL","EXIT","STAKE","P&L","REASON"].map(h=>(<th key={h} style={{padding:"6px 10px",textAlign:"left",color:"#8ab8c8",fontSize:7,letterSpacing:".12em",fontWeight:400,borderBottom:"1px solid #0c1c28",whiteSpace:"nowrap"}}>{h}</th>))}</tr>
+                  <tr>{["OPENED","CLOSED","CITY","BUCKET","DIR","FILL","EXIT","STAKE","P&L","REASON"].map(h=>(<th key={h} style={{padding:"6px 10px",textAlign:"left",color:"#8ab8c8",fontSize:7,letterSpacing:".12em",fontWeight:400,borderBottom:"1px solid #0c1c28",whiteSpace:"nowrap"}}>{h}</th>))}</tr>
                 </thead>
                 <tbody>{paperTrades.slice(0,80).map((t,i)=>{
-                  const closedDate = t.closed_at ? new Date(t.closed_at).toLocaleDateString("en-US",{month:"numeric",day:"numeric"}) : "—";
+                  const closedDate = t.closed_at ? new Date(t.closed_at).toLocaleString("en-US",{month:"numeric",day:"numeric",hour:"numeric",minute:"2-digit",hour12:true}) : "—";
+                  const openedDate = t.opened_at ? new Date(t.opened_at).toLocaleString("en-US",{month:"numeric",day:"numeric",hour:"numeric",minute:"2-digit",hour12:true}) : "—";
                   return (
                     <tr key={i} className="rh" style={{borderBottom:"1px solid #07080b"}}>
-                      <td style={{padding:"8px 10px",color:"#8ab8c8",whiteSpace:"nowrap"}}>{closedDate}</td>
+                      <td style={{padding:"8px 10px",color:"#8ab8c8",whiteSpace:"nowrap",fontSize:8}}>{openedDate}</td>
+                      <td style={{padding:"8px 10px",color:"#8ab8c8",whiteSpace:"nowrap",fontSize:8}}>{closedDate}</td>
                       <td style={{padding:"8px 10px"}}><CityBadge city={t.city}/></td>
                       <td style={{padding:"8px 10px",color:"#fff"}}>{t.bucket}</td>
                       <td style={{padding:"8px 10px"}}><DirectionBadge dir={t.direction}/></td>
