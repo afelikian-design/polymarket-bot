@@ -89,6 +89,35 @@ export default function Dashboard() {
   const [elapsed, setElapsed]   = useState(0);
   const [apiError, setApiError] = useState(false);
   const [expandedAgent, setExpandedAgent] = useState(false);
+
+  // Right panel section sizing: each can be "expanded", "collapsed", or "maximized"
+  // Only one can be maximized at a time; maximizing one collapses the others
+  const [rightSections, setRightSections] = useState({
+    distribution: "expanded",
+    analyzer: "expanded",
+    citySignals: "expanded",
+  });
+
+  function toggleSection(name) {
+    setRightSections(prev => {
+      const next = {...prev};
+      next[name] = prev[name] === "collapsed" ? "expanded" : "collapsed";
+      return next;
+    });
+  }
+
+  function maximizeSection(name) {
+    setRightSections(prev => {
+      // If already maximized, return to all-expanded
+      if (prev[name] === "maximized") {
+        return {distribution: "expanded", analyzer: "expanded", citySignals: "expanded"};
+      }
+      // Otherwise maximize this, collapse others
+      const next = {distribution: "collapsed", analyzer: "collapsed", citySignals: "collapsed"};
+      next[name] = "maximized";
+      return next;
+    });
+  }
   const activityRef = useRef(null);
 
   const [portfolio, setPortfolio] = useState({
@@ -917,11 +946,30 @@ export default function Dashboard() {
         <div style={{background:"#070a0d",borderLeft:"1px solid #0c1c28",display:"flex",flexDirection:"column",overflow:"hidden"}}>
 
           {/* DISTRIBUTION CHART — top */}
-          <div style={{flex:"0 0 auto",padding:"10px 12px",borderBottom:"1px solid #0c1c28",overflow:"hidden",display:"flex",flexDirection:"column"}}>
-            <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}>
+          <div style={{
+            flex: rightSections.distribution === "maximized" ? "1 1 auto" : (rightSections.distribution === "collapsed" ? "0 0 auto" : "0 0 auto"),
+            padding:"10px 12px",
+            borderBottom:"1px solid #0c1c28",
+            overflow: rightSections.distribution === "maximized" ? "auto" : "hidden",
+            display:"flex",
+            flexDirection:"column",
+            minHeight: 0,
+          }}>
+            <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8,flexShrink:0}}>
+              <button
+                onClick={()=>toggleSection("distribution")}
+                style={{background:"none",border:"none",color:"#8ab8c8",cursor:"pointer",fontSize:9,padding:0,marginRight:2,fontFamily:"inherit"}}
+                title={rightSections.distribution === "collapsed" ? "Expand" : "Collapse"}
+              >{rightSections.distribution === "collapsed" ? "▶" : "▼"}</button>
               <span style={{fontSize:8,color:"#8ab8c8",letterSpacing:".2em"}}>MODEL vs MARKET</span>
               <span style={{fontSize:8,color:"#304858"}}>· the edge</span>
+              <button
+                onClick={()=>maximizeSection("distribution")}
+                style={{marginLeft:"auto",background:"none",border:"1px solid #1a2a38",color:"#4a6070",cursor:"pointer",fontSize:8,padding:"1px 5px",fontFamily:"inherit",borderRadius:2}}
+                title={rightSections.distribution === "maximized" ? "Restore all sections" : "Maximize this section"}
+              >{rightSections.distribution === "maximized" ? "⊟" : "⊞"}</button>
             </div>
+            {rightSections.distribution !== "collapsed" && (<>
             {/* Market selector */}
             <div style={{display:"flex",gap:4,marginBottom:10}}>
               <select
@@ -988,19 +1036,39 @@ export default function Dashboard() {
                 )}
               </div>
             )}
+            </>)}
           </div>
 
           {/* STRATEGY ANALYZER — middle */}
-          <div style={{flex:"1 1 auto",padding:"10px 12px",borderBottom:"1px solid #0c1c28",minHeight:0,display:"flex",flexDirection:"column",overflow:"hidden"}}>
+          <div style={{
+            flex: rightSections.analyzer === "maximized" ? "1 1 auto" : (rightSections.analyzer === "collapsed" ? "0 0 auto" : "1 1 auto"),
+            padding:"10px 12px",
+            borderBottom:"1px solid #0c1c28",
+            minHeight:0,
+            display:"flex",
+            flexDirection:"column",
+            overflow:"hidden",
+          }}>
             <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:6,flexShrink:0}}>
+              <button
+                onClick={()=>toggleSection("analyzer")}
+                style={{background:"none",border:"none",color:"#8ab8c8",cursor:"pointer",fontSize:9,padding:0,marginRight:2,fontFamily:"inherit"}}
+                title={rightSections.analyzer === "collapsed" ? "Expand" : "Collapse"}
+              >{rightSections.analyzer === "collapsed" ? "▶" : "▼"}</button>
               <span style={{fontSize:8,color:"#8ab8c8",letterSpacing:".2em"}}>STRATEGY ANALYZER</span>
               <span style={{fontSize:8,color:"#304858"}}>· {analyzer?.available ? `2x daily` : `pending`}</span>
               {analyzer?.ts && (
-                <span style={{fontSize:7,color:"#4a6070",marginLeft:"auto"}}>
+                <span style={{fontSize:7,color:"#4a6070"}}>
                   {new Date(analyzer.ts).toLocaleString("en-US",{timeZone:"America/Los_Angeles",month:"short",day:"numeric",hour:"numeric",minute:"2-digit"})}
                 </span>
               )}
+              <button
+                onClick={()=>maximizeSection("analyzer")}
+                style={{marginLeft:"auto",background:"none",border:"1px solid #1a2a38",color:"#4a6070",cursor:"pointer",fontSize:8,padding:"1px 5px",fontFamily:"inherit",borderRadius:2}}
+                title={rightSections.analyzer === "maximized" ? "Restore all sections" : "Maximize this section"}
+              >{rightSections.analyzer === "maximized" ? "⊟" : "⊞"}</button>
             </div>
+            {rightSections.analyzer !== "collapsed" && (<>
 
             {!analyzer?.available ? (
               <div style={{fontSize:9,color:"#4a6070",textAlign:"center",padding:"16px 0"}}>
@@ -1093,12 +1161,30 @@ export default function Dashboard() {
                 )}
               </div>
             )}
+            </>)}
           </div>
 
-          {/* CITY SIGNALS — bottom (preserved) */}
-          <div style={{padding:"10px 12px",flexShrink:0}}>
-            <div style={{fontSize:7,color:"#4a6070",letterSpacing:".18em",marginBottom:8}}>OPEN SIGNALS BY CITY</div>
-            {CITY_LIST.map(city=>{
+          {/* CITY SIGNALS — bottom */}
+          <div style={{
+            padding:"10px 12px",
+            flexShrink:0,
+            flex: rightSections.citySignals === "maximized" ? "1 1 auto" : "0 0 auto",
+            overflow: rightSections.citySignals === "maximized" ? "auto" : "hidden",
+          }}>
+            <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}>
+              <button
+                onClick={()=>toggleSection("citySignals")}
+                style={{background:"none",border:"none",color:"#8ab8c8",cursor:"pointer",fontSize:9,padding:0,marginRight:2,fontFamily:"inherit"}}
+                title={rightSections.citySignals === "collapsed" ? "Expand" : "Collapse"}
+              >{rightSections.citySignals === "collapsed" ? "▶" : "▼"}</button>
+              <span style={{fontSize:7,color:"#8ab8c8",letterSpacing:".18em"}}>OPEN SIGNALS BY CITY</span>
+              <button
+                onClick={()=>maximizeSection("citySignals")}
+                style={{marginLeft:"auto",background:"none",border:"1px solid #1a2a38",color:"#4a6070",cursor:"pointer",fontSize:8,padding:"1px 5px",fontFamily:"inherit",borderRadius:2}}
+                title={rightSections.citySignals === "maximized" ? "Restore all sections" : "Maximize this section"}
+              >{rightSections.citySignals === "maximized" ? "⊟" : "⊞"}</button>
+            </div>
+            {rightSections.citySignals !== "collapsed" && CITY_LIST.map(city=>{
               const stat = cityStats.find(s=>s.city===city) || {open_count:0,open_stake:0};
               const c = CITIES[city];
               const max = Math.max(...cityStats.map(s=>s.open_count||0), 1);
