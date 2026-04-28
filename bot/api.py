@@ -286,9 +286,26 @@ def weather_city_stats():
 
 @app.route("/api/weather/scanner_status")
 def weather_scanner_status():
-    """Scanner process health: last scan time + signal counts last 24h."""
-    signals = _read_csv(os.path.join(WEATHER_DIR, "signals.csv"))
-    last_ts = None
+    """Scanner process health: last scan ATTEMPT time (from scan.log mtime),
+       signal counts in last 24h (from signals.csv).
+       scan.log is appended every time scan_v3 runs even when no candidates
+       found. signals.csv only updates when candidates fire. Using scan.log
+       is the right "is the scanner alive" indicator."""
+    import os as _os
+    from datetime import datetime as _dt, timezone as _tz
+
+    # Last scan ATTEMPT — from scan.log file mtime
+    scan_log = _os.path.join(WEATHER_DIR, "logs", "scan.log")
+    last_scan_dt = None
+    if _os.path.exists(scan_log):
+        try:
+            mtime = _os.path.getmtime(scan_log)
+            last_scan_dt = _dt.fromtimestamp(mtime, tz=_tz.utc).replace(tzinfo=None)
+        except Exception:
+            pass
+
+    # Signal count in last 24h — from signals.csv (when candidates fired)
+    signals = _read_csv(_os.path.join(WEATHER_DIR, "signals.csv"))
     last_24h = 0
     now = datetime.utcnow()
     cutoff = now - timedelta(hours=24)
@@ -298,34 +315,30 @@ def weather_scanner_status():
             dt = datetime.fromisoformat(ts.replace("Z", "").split("+")[0])
             if dt > cutoff:
                 last_24h += 1
-            if last_ts is None or dt > last_ts:
-                last_ts = dt
         except Exception:
             continue
+
+    # Status from scan ATTEMPT time
     status = "running"
     message = "Awaiting next scan"
-    if last_ts is None:
+    if last_scan_dt is None:
         status = "idle"
         message = "No scans yet"
     else:
-        mins_since = int((now - last_ts).total_seconds() / 60)
+        mins_since = int((now - last_scan_dt).total_seconds() / 60)
         if mins_since > 90:
             status = "stale"
             message = f"Last scan {mins_since}m ago"
         else:
-            message = f"Last scan {mins_since}m ago · {last_24h} signals in 24h"
+            message = f"Last scan {mins_since}m ago - {last_24h} signals in 24h"
 
     return jsonify({
         "status":  status,
         "message": message,
-        "last_scan_utc": last_ts.isoformat() if last_ts else None,
+        "last_scan_utc": last_scan_dt.isoformat() if last_scan_dt else None,
         "signals_24h":   last_24h,
     })
 
-
-# ─────────────────────────────────────────────────────────────────────────────
-# PRESERVED ENDPOINTS — still used by existing bot infrastructure
-# ─────────────────────────────────────────────────────────────────────────────
 
 @app.route("/api/activity")
 def get_activity():
