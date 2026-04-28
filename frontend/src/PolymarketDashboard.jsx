@@ -4,10 +4,11 @@ import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, ReferenceL
 const API_BASE = "https://api.feliksbot.com";
 
 const TIMEFRAMES = [
-  { label: "1D",  points: 1   },
-  { label: "7D",  points: 7   },
-  { label: "30D", points: 30  },
-  { label: "ALL", points: 999 },
+  { label: "1H",  hours: 1     },
+  { label: "1D",  hours: 24    },
+  { label: "7D",  hours: 168   },
+  { label: "30D", hours: 720   },
+  { label: "ALL", hours: null  },  // no filter
 ];
 
 // ── CITY METADATA (resolution stations, colors) ──────────────────
@@ -83,7 +84,7 @@ const ET = {
 
 export default function Dashboard() {
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
-  const [tfIdx, setTfIdx]       = useState(2);  // 30D
+  const [tfIdx, setTfIdx]       = useState(2);  // 7D (good default — shows trend without noise)
   const [mobileTab, setMobileTab] = useState("overview");
   const [desktopTab, setDesktopTab] = useState("positions");
   const [elapsed, setElapsed]   = useState(0);
@@ -176,11 +177,13 @@ export default function Dashboard() {
         // Build P&L series from bankroll history
         const history = (pb && pb.history) || [];
         const chartData = history.map(h => ({
+          ts: h.ts,
+          tsMs: h.ts ? new Date(h.ts).getTime() : null,
           time: h.ts ? new Date(h.ts).toLocaleTimeString("en-US",{timeZone:"America/Los_Angeles",hour:"2-digit",minute:"2-digit"}) : "",
           balance: h.equity,
           realized: 1000 + (h.realized_pnl || 0),
         }));
-        if (chartData.length === 0) chartData.push({time:"start",balance:1000,realized:1000});
+        if (chartData.length === 0) chartData.push({time:"start",balance:1000,realized:1000,ts:null,tsMs:null});
         setPnlSeries(chartData);
         setScanner(scan||{status:"unknown",message:"No data"});
         setForecastMarkets(fm||[]);
@@ -281,12 +284,35 @@ export default function Dashboard() {
 
   useEffect(()=>{const t=setInterval(()=>setElapsed(e=>e+1),1000);return()=>clearInterval(t);},[]);
 
-  // ── Filter P&L by timeframe ───────────────────────────────────
+  // ── Filter P&L by timeframe (actual time-based, not row-based) ──
   const filteredPnl = (() => {
     if (!pnlSeries.length) return [];
     const tf = TIMEFRAMES[tfIdx];
-    if (tf.label === "ALL") return pnlSeries;
-    return pnlSeries.slice(-tf.points - 1);
+    if (tf.hours === null) {
+      // ALL — relabel each point with date+time for context
+      return pnlSeries.map(p => ({
+        ...p,
+        time: p.ts ? new Date(p.ts).toLocaleString("en-US",{timeZone:"America/Los_Angeles",month:"numeric",day:"numeric",hour:"2-digit",minute:"2-digit"}) : p.time,
+      }));
+    }
+    const cutoffMs = Date.now() - (tf.hours * 60 * 60 * 1000);
+    const filtered = pnlSeries.filter(p => p.tsMs && p.tsMs >= cutoffMs);
+    // Adapt time label format depending on window length
+    const formatted = filtered.map(p => {
+      if (!p.ts) return p;
+      const d = new Date(p.ts);
+      let timeLabel;
+      if (tf.hours <= 24) {
+        timeLabel = d.toLocaleTimeString("en-US",{timeZone:"America/Los_Angeles",hour:"2-digit",minute:"2-digit"});
+      } else if (tf.hours <= 168) {
+        timeLabel = d.toLocaleString("en-US",{timeZone:"America/Los_Angeles",weekday:"short",hour:"2-digit"});
+      } else {
+        timeLabel = d.toLocaleDateString("en-US",{timeZone:"America/Los_Angeles",month:"numeric",day:"numeric"});
+      }
+      return {...p, time: timeLabel};
+    });
+    // If filtering returns nothing (no data in window), show last 2 points so chart isn't blank
+    return formatted.length > 0 ? formatted : pnlSeries.slice(-2);
   })();
 
   const chartKey = "balance";

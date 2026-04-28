@@ -510,7 +510,7 @@ def paper_bankroll():
         "equity":       _fnum(r.get("equity")),
         "realized_pnl": _fnum(r.get("realized_pnl")),
         "open_count":   _fint(r.get("open_positions")),
-    } for r in rows[-500:]]  # last 500 snapshots
+    } for r in rows]  # ALL snapshots, frontend filters by time window
 
     return jsonify({
         "cash":           _fnum(latest.get("cash")),
