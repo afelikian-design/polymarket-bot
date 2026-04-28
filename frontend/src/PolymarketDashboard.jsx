@@ -820,7 +820,7 @@ export default function Dashboard() {
             {desktopTab==="positions"&&(paperPositions.length===0?<div style={{padding:"40px",textAlign:"center",color:"#8ab8c8",fontSize:11}}>No open positions. Waiting for scanner to fire.</div>:(
               <table style={{width:"100%",borderCollapse:"collapse",fontSize:9}}>
                 <thead style={{background:"#070a0d",position:"sticky",top:0}}>
-                  <tr>{["CITY","BUCKET","DIR","MODEL %","FILL","NOW","STAKE","UNRLZD","%","ENTRY","TGT DATE"].map(h=>(<th key={h} style={{padding:"6px 10px",textAlign:"left",color:"#8ab8c8",fontSize:7,letterSpacing:".12em",fontWeight:400,borderBottom:"1px solid #0c1c28",whiteSpace:"nowrap"}}>{h}</th>))}</tr>
+                  <tr>{["CITY","BUCKET","DIR","MODEL %","MODELS","FILL","NOW","STAKE","UNRLZD","%","ENTRY","TGT DATE"].map(h=>(<th key={h} style={{padding:"6px 10px",textAlign:"left",color:"#8ab8c8",fontSize:7,letterSpacing:".12em",fontWeight:400,borderBottom:"1px solid #0c1c28",whiteSpace:"nowrap"}}>{h}</th>))}</tr>
                 </thead>
                 <tbody>{paperPositions.map((p,i)=>{
                   const pnlPct = p.stake_usd > 0 ? (p.unrealized_pnl / p.stake_usd * 100) : 0;
@@ -830,6 +830,7 @@ export default function Dashboard() {
                       <td style={{padding:"8px 10px",color:"#fff",fontWeight:500}}>{p.bucket}</td>
                       <td style={{padding:"8px 10px"}}><DirectionBadge dir={p.direction}/></td>
                       <td style={{padding:"8px 10px",color:"#80c8e0"}}>{fmtPct(p.ensemble_prob)}</td>
+                      <td style={{padding:"8px 10px",color:p.n_models_agree>=3?"#00ff8c":"#f0c070",fontWeight:500}}>{p.n_models_agree ?? "?"}/4</td>
                       <td style={{padding:"8px 10px",color:"#c8d8e0"}}>{p.fill_price?.toFixed(3)}</td>
                       <td style={{padding:"8px 10px",color:p.current_price>=p.fill_price?"#00a858":"#ff4455",fontWeight:500}}>{p.current_price?.toFixed(3)}</td>
                       <td style={{padding:"8px 10px",color:"#f0c070"}}>{fmt$(p.stake_usd)}</td>
@@ -869,7 +870,7 @@ export default function Dashboard() {
             {desktopTab==="trades"&&(paperTrades.length===0?<div style={{padding:"40px",textAlign:"center",color:"#8ab8c8",fontSize:11}}>No closed paper trades yet. Positions resolve at noon UTC or when stop/target hits.</div>:(
               <table style={{width:"100%",borderCollapse:"collapse",fontSize:9}}>
                 <thead style={{background:"#070a0d",position:"sticky",top:0}}>
-                  <tr>{["OPENED","CLOSED","CITY","BUCKET","DIR","FILL","EXIT","STAKE","P&L","REASON"].map(h=>(<th key={h} style={{padding:"6px 10px",textAlign:"left",color:"#8ab8c8",fontSize:7,letterSpacing:".12em",fontWeight:400,borderBottom:"1px solid #0c1c28",whiteSpace:"nowrap"}}>{h}</th>))}</tr>
+                  <tr>{["OPENED","CLOSED","CITY","BUCKET","DIR","MODELS","FILL","EXIT","STAKE","P&L","REASON"].map(h=>(<th key={h} style={{padding:"6px 10px",textAlign:"left",color:"#8ab8c8",fontSize:7,letterSpacing:".12em",fontWeight:400,borderBottom:"1px solid #0c1c28",whiteSpace:"nowrap"}}>{h}</th>))}</tr>
                 </thead>
                 <tbody>{paperTrades.slice(0,80).map((t,i)=>{
                   const closedDate = t.closed_at ? new Date(t.closed_at).toLocaleString("en-US",{month:"numeric",day:"numeric",hour:"numeric",minute:"2-digit",hour12:true}) : "—";
@@ -881,6 +882,7 @@ export default function Dashboard() {
                       <td style={{padding:"8px 10px"}}><CityBadge city={t.city}/></td>
                       <td style={{padding:"8px 10px",color:"#fff"}}>{t.bucket}</td>
                       <td style={{padding:"8px 10px"}}><DirectionBadge dir={t.direction}/></td>
+                      <td style={{padding:"8px 10px",color:t.n_models_agree>=3?"#00ff8c":"#f0c070",fontWeight:500,fontSize:8}}>{t.n_models_agree ?? "?"}/4</td>
                       <td style={{padding:"8px 10px",color:"#c8d8e0"}}>{t.fill_price?.toFixed(3)}</td>
                       <td style={{padding:"8px 10px",color:"#c8d8e0"}}>{t.exit_price?.toFixed(3)}</td>
                       <td style={{padding:"8px 10px",color:"#f0c070"}}>{fmt$(t.stake_usd)}</td>
