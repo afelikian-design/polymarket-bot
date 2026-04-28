@@ -486,6 +486,7 @@ def paper_trades():
             "stake_usd":       _fnum(r.get("stake_usd")),
             "realized_pnl":    _fnum(r.get("realized_pnl")),
             "exit_reason":     r.get("exit_reason", ""),
+            "n_models_agree":  _fint(r.get("n_models_agree")),
         })
     return jsonify(out)
 
