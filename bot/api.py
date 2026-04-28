@@ -295,7 +295,7 @@ def weather_scanner_status():
     from datetime import datetime as _dt, timezone as _tz
 
     # Last scan ATTEMPT — from scan.log file mtime
-    scan_log = _os.path.join(WEATHER_DIR, "logs", "scan.log")
+    scan_log = _os.path.join(_os.path.dirname(WEATHER_DIR), "logs", "scan.log")
     last_scan_dt = None
     if _os.path.exists(scan_log):
         try:
