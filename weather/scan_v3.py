@@ -43,6 +43,11 @@ NO_MIN_EDGE = 0.08
 MIN_VOLUME = 1000
 MAX_LEAD_HOURS = 48
 MIN_LEAD_HOURS = 2
+# 12-24h dead zone — all-time data shows this band is structurally bad
+# (n=39, 28% win rate, -$792 P&L, 2026-04-22 through 2026-05-08).
+# Forecast is stale (market integrated it) but TP doesn't have time to fire.
+BLOCKED_LEAD_MIN = 12
+BLOCKED_LEAD_MAX = 24
 
 MIN_MODEL_AGREEMENT = 3
 
@@ -248,6 +253,8 @@ def scan_event(event):
 
     now_utc = pd.Timestamp.now(tz="UTC")
     lead_hours = (end_dt - now_utc).total_seconds() / 3600
+    if BLOCKED_LEAD_MIN <= lead_hours < BLOCKED_LEAD_MAX:
+        return []  # 12-24h dead zone — see constants comment
     if not (MIN_LEAD_HOURS <= lead_hours <= MAX_LEAD_HOURS):
         return []
 
