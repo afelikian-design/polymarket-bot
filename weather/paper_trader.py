@@ -41,6 +41,10 @@ MAX_BET_PCT         = 0.10     # cap at 10% of bankroll per trade
 ENTRY_SLIPPAGE_PCT  = 0.01     # pay 1% worse than quoted
 STOP_LOSS_PCT       = None     # DISABLED — binary markets shouldn't stop on intraday noise
 TAKE_PROFIT_MULT    = 2.0      # close if current_price >= entry_price * 2
+TP_FILL_THRESHOLD   = 0.15     # only TP cheap fills; expensive bets hold to resolution
+                               # Data (n=49 TP exits): TP captures value on fills <=$0.15
+                               # (most miss at resolution), but COSTS $1,479+$800 on
+                               # fills $0.15-$0.30 (76-83% hit at resolution).
 
 GAMMA = "https://gamma-api.polymarket.com"
 CLOB  = "https://clob.polymarket.com"
@@ -373,8 +377,10 @@ def update_open_positions(positions):
         # exit that matters. (Kept TAKE_PROFIT to lock in cases where market
         # already prices our thesis at >2x entry.)
 
-        # TAKE PROFIT — when current price >= fill_price * TAKE_PROFIT_MULT
-        if fill > 0 and price >= fill * TAKE_PROFIT_MULT:
+        # TAKE PROFIT — only fires for cheap fills (<=$0.15) where data
+        # shows tail bets mostly miss at resolution and TP saves the stake.
+        # Expensive fills (>$0.15) hold to resolution where 76-83% historically win.
+        if fill > 0 and fill <= TP_FILL_THRESHOLD and price >= fill * TAKE_PROFIT_MULT:
             p["status"] = "CLOSED"
             p["closed_at"] = datetime.now(timezone.utc).isoformat()
             p["exit_reason"] = "TAKE_PROFIT"
