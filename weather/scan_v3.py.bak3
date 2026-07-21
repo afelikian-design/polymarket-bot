@@ -1,0 +1,429 @@
+"""
+PolyBot Weather V3 — Fixed Market Discovery
+============================================
+Critical fixes vs V2:
+  • Uses /events endpoint (not /markets) with tag_slug=weather
+  • Each event contains child markets (one per bucket)
+  • Bucket label lives in groupItemTitle, not outcomes
+  • LA slug = "los-angeles" (not "la")
+  • Parses "55°F or below" / "74°F or higher" tail labels
+  • Parses "56-57°F" range labels
+"""
+import requests
+import pandas as pd
+import numpy as np
+import json
+import re
+from datetime import date, datetime, timedelta, timezone
+from pathlib import Path
+
+OUT = Path("data")
+OUT.mkdir(exist_ok=True)
+
+CALIB = pd.read_csv(OUT / "error_summary.csv").set_index("city")
+
+# City -> slug fragment (verified against live API)
+CITIES = {
+    "NYC":     {"lat": 40.7772, "lon": -73.8726, "slug_keys": ["nyc"]},
+    "Chicago": {"lat": 41.9742, "lon": -87.9073, "slug_keys": ["chicago"]},
+    "Dallas":  {"lat": 32.8471, "lon": -96.8518, "slug_keys": ["dallas"]},
+    "LA":      {"lat": 34.0224, "lon": -118.2851, "slug_keys": ["los-angeles"]},
+}
+
+GAMMA = "https://gamma-api.polymarket.com"
+
+# ========== THRESHOLDS ==========
+YES_MIN_EDGE = 0.08
+YES_MAX_PRICE = 0.45
+
+NO_MAX_YES_PRICE = 0.45
+NO_MAX_ENSEMBLE_PROB = 0.05
+NO_MIN_EDGE = 0.08
+
+MIN_VOLUME = 1000
+MAX_LEAD_HOURS = 48
+MIN_LEAD_HOURS = 2
+
+MIN_MODEL_AGREEMENT = 3
+
+KELLY_FRACTION = 0.25
+BANKROLL = 1000
+MAX_BET_PCT = 0.02
+
+MODEL_RUN_HOURS_UTC = [0, 6, 12, 18]
+
+
+def in_aggressive_window(now_utc=None):
+    now = now_utc or datetime.now(timezone.utc)
+    return now.hour in MODEL_RUN_HOURS_UTC and now.minute < 60
+
+
+def fetch_weather_events():
+    """
+    Paginate through weather events. Each event = one daily-high market
+    for one city/date, containing multiple child markets (one per bucket).
+    """
+    all_events = []
+    offset = 0
+    while offset < 500:
+        r = requests.get(
+            f"{GAMMA}/events",
+            params={"active": "true", "closed": "false",
+                    "tag_slug": "weather", "limit": 100, "offset": offset},
+            timeout=20,
+        )
+        r.raise_for_status()
+        batch = r.json()
+        if not isinstance(batch, list) or not batch:
+            break
+        all_events.extend(batch)
+        if len(batch) < 100:
+            break
+        offset += 100
+
+    # Filter to daily high temp markets in our cities
+    matched = []
+    for e in all_events:
+        slug = (e.get("slug") or "").lower()
+        # Must be a "highest-temperature-in-{city}-on-{date}" market
+        if not slug.startswith("highest-temperature-in-"):
+            continue
+        for city, info in CITIES.items():
+            if any(f"-in-{k}-on-" in slug for k in info["slug_keys"]):
+                e["_city"] = city
+                matched.append(e)
+                break
+    return matched
+
+
+def fetch_ensemble_forecast(lat, lon, target_date):
+    """Pull GFS ensemble members for target_date. Returns np.array of daily highs."""
+    r = requests.get(
+        "https://ensemble-api.open-meteo.com/v1/ensemble",
+        params={
+            "latitude": lat, "longitude": lon,
+            "hourly": "temperature_2m",
+            "models": "gfs_seamless",
+            "forecast_days": 7,
+            "timezone": "auto",
+            "temperature_unit": "fahrenheit",
+        }, timeout=20,
+    )
+    r.raise_for_status()
+    d = r.json()
+    hourly = d["hourly"]
+    times = pd.to_datetime(hourly["time"])
+    dates = pd.Series(times).dt.date
+
+    # Ensemble member keys look like "temperature_2m_member01" ... "temperature_2m_member30"
+    # plus "temperature_2m" (control)
+    member_keys = [k for k in hourly.keys() if k.startswith("temperature_2m")]
+    if not member_keys:
+        return np.array([])
+
+    mask = (dates == target_date).values
+    if mask.sum() == 0:
+        return np.array([])
+
+    member_highs = []
+    for key in member_keys:
+        values = np.array(hourly[key], dtype=float)
+        day_values = values[mask]
+        if len(day_values) > 0 and not np.all(np.isnan(day_values)):
+            member_highs.append(float(np.nanmax(day_values)))
+    return np.array(member_highs)
+
+
+def fetch_multi_model_forecast(lat, lon, target_date):
+    """GFS + ECMWF + ICON + best_match point forecasts for agreement check."""
+    models = ["gfs_seamless", "ecmwf_ifs025", "icon_seamless", "best_match"]
+    r = requests.get(
+        "https://api.open-meteo.com/v1/forecast",
+        params={
+            "latitude": lat, "longitude": lon,
+            "daily": "temperature_2m_max",
+            "forecast_days": 3,
+            "timezone": "auto",
+            "temperature_unit": "fahrenheit",
+            "models": ",".join(models),
+        }, timeout=15,
+    )
+    r.raise_for_status()
+    d = r.json()
+    daily = d["daily"]
+    dates = pd.Series(pd.to_datetime(daily["time"])).dt.date
+    idx = np.where(dates == target_date)[0]
+    if len(idx) == 0:
+        return {}
+    i = int(idx[0])
+    out = {}
+    for model in models:
+        key = f"temperature_2m_max_{model}"
+        if key in daily and i < len(daily[key]) and daily[key][i] is not None:
+            out[model] = float(daily[key][i])
+    return out
+
+
+def parse_bucket_label(label):
+    """
+    Parse Polymarket bucket labels:
+      "55°F or below"  -> (-inf, 56)
+      "56-57°F"        -> (56, 58)
+      "74°F or higher" -> (74, +inf)
+    Returns (lo, hi) in °F where bucket includes [lo, hi).
+    """
+    if not label:
+        return None, None
+    s = label.lower().replace("°f", "").replace("°", "").strip()
+
+    # Range: "56-57" or "56 - 57"
+    m = re.search(r"(\d+)\s*[-–]\s*(\d+)", s)
+    if m:
+        lo = float(m.group(1))
+        hi = float(m.group(2)) + 1  # inclusive upper -> exclusive
+        return lo, hi
+
+    # Upper tail: "74 or higher", "74+", "above 74"
+    if any(kw in s for kw in ["or higher", "higher", "above", "+"]):
+        n = re.search(r"(\d+)", s)
+        if n:
+            return float(n.group(1)), 200.0
+
+    # Lower tail: "55 or below", "below 55", "lower"
+    if any(kw in s for kw in ["or below", "below", "lower", "or less"]):
+        n = re.search(r"(\d+)", s)
+        if n:
+            return -200.0, float(n.group(1)) + 1  # "55 or below" includes 55
+
+    # Single value: "60°F"
+    n = re.search(r"(\d+)", s)
+    if n:
+        v = float(n.group(1))
+        return v, v + 1
+
+    return None, None
+
+
+def ensemble_bucket_probability(members, lo, hi):
+    """Fraction of members with daily high in [lo, hi)."""
+    if len(members) == 0:
+        return None
+    n_in = int(((members >= lo) & (members < hi)).sum())
+    return n_in / len(members)
+
+
+def check_model_agreement(multi_model_fc, lo, hi):
+    """How many independent models point to this bucket (within 2°F of bucket center)."""
+    if not multi_model_fc:
+        return 0
+    if lo < -100:  # lower tail
+        return sum(1 for v in multi_model_fc.values() if v < hi)
+    if hi > 100:   # upper tail
+        return sum(1 for v in multi_model_fc.values() if v >= lo)
+    center = (lo + hi) / 2
+    return sum(1 for v in multi_model_fc.values() if abs(v - center) <= 2.0)
+
+
+def kelly_size(p, price, bankroll, fraction=KELLY_FRACTION, cap_pct=MAX_BET_PCT):
+    if price <= 0 or price >= 1 or p <= 0:
+        return 0
+    b = (1 - price) / price
+    q = 1 - p
+    edge = (b * p - q) / b
+    if edge <= 0:
+        return 0
+    return min(bankroll * edge * fraction, bankroll * cap_pct)
+
+
+def scan_event(event):
+    """Scan one event (one city-date) for edge candidates across its buckets."""
+    city = event["_city"]
+    info = CITIES[city]
+
+    try:
+        end_dt = pd.to_datetime(event["endDate"])
+        target_date = end_dt.date()
+    except Exception:
+        return []
+
+    now_utc = pd.Timestamp.now(tz="UTC")
+    lead_hours = (end_dt - now_utc).total_seconds() / 3600
+    if not (MIN_LEAD_HOURS <= lead_hours <= MAX_LEAD_HOURS):
+        return []
+
+    event_volume = float(event.get("volume") or 0)
+    if event_volume < MIN_VOLUME:
+        return []
+
+    child_markets = event.get("markets", [])
+    if not child_markets:
+        return []
+
+    # Pull forecast data once per event
+    try:
+        members = fetch_ensemble_forecast(info["lat"], info["lon"], target_date)
+        multi_model = fetch_multi_model_forecast(info["lat"], info["lon"], target_date)
+    except Exception as e:
+        return []
+
+    if len(members) < 20:
+        return []
+
+    ensemble_mean = float(np.mean(members))
+    ensemble_std = float(np.std(members))
+    n_members = len(members)
+    ts = datetime.now(timezone.utc).isoformat()
+    aggressive = in_aggressive_window()
+    candidates = []
+    history_rows = []  # every bucket, edge or not
+
+    for m in child_markets:
+        label = m.get("groupItemTitle") or ""
+        lo, hi = parse_bucket_label(label)
+        if lo is None:
+            continue
+
+        prices_raw = m.get("outcomePrices", "[]")
+        try:
+            prices = json.loads(prices_raw) if isinstance(prices_raw, str) else prices_raw
+            yes_price = float(prices[0])
+        except Exception:
+            continue
+
+        prob = ensemble_bucket_probability(members, lo, hi)
+        if prob is None:
+            continue
+
+        n_models_agree = check_model_agreement(multi_model, lo, hi)
+
+        # Log forecast history for EVERY bucket (for visualization)
+        history_rows.append({
+            "ts": ts, "city": city,
+            "event_slug": event["slug"],
+            "target_date": str(target_date),
+            "bucket": label,
+            "bucket_lo": lo, "bucket_hi": hi,
+            "ensemble_prob": round(prob, 4),
+            "yes_price": round(yes_price, 4),
+            "no_price": round(1 - yes_price, 4),
+            "n_models_agree": n_models_agree,
+            "n_members": n_members,
+            "ensemble_mean": round(ensemble_mean, 2),
+            "ensemble_std": round(ensemble_std, 2),
+            "lead_hours": round(lead_hours, 1),
+        })
+
+        # === YES-SIDE: buy underpriced buckets ===
+        yes_edge = prob - yes_price
+        if (yes_edge >= YES_MIN_EDGE
+                and yes_price <= YES_MAX_PRICE
+                and yes_price > 0.01
+                and n_models_agree >= MIN_MODEL_AGREEMENT
+                and prob >= 0.15):
+            size = kelly_size(prob, yes_price, BANKROLL)
+            if size >= 1:
+                candidates.append({
+                    "ts": ts, "city": city,
+                    "event_slug": event["slug"],
+                    "market_slug": m.get("slug"),
+                    "target_date": str(target_date),
+                    "lead_hours": round(lead_hours, 1),
+                    "direction": "YES", "bucket": label,
+                    "bucket_lo": lo, "bucket_hi": hi,
+                    "ensemble_prob": round(prob, 4),
+                    "market_price": round(yes_price, 4),
+                    "edge": round(yes_edge, 4),
+                    "ensemble_mean": round(ensemble_mean, 2),
+                    "ensemble_std": round(ensemble_std, 2),
+                    "n_members": n_members,
+                    "n_models_agree": n_models_agree,
+                    "kelly_size_$": round(size, 2),
+                    "aggressive_window": aggressive,
+                })
+
+        # === NO-SIDE: fade overpriced tails ===
+        no_price = 1 - yes_price
+        no_prob = 1 - prob
+        no_edge = no_prob - no_price
+        if (prob <= NO_MAX_ENSEMBLE_PROB
+                and yes_price <= NO_MAX_YES_PRICE
+                and yes_price >= 0.10
+                and no_edge >= NO_MIN_EDGE
+                and n_members >= 25
+                and n_models_agree >= MIN_MODEL_AGREEMENT):
+            size = kelly_size(no_prob, no_price, BANKROLL)
+            if size >= 1:
+                candidates.append({
+                    "ts": ts, "city": city,
+                    "event_slug": event["slug"],
+                    "market_slug": m.get("slug"),
+                    "target_date": str(target_date),
+                    "lead_hours": round(lead_hours, 1),
+                    "direction": "NO", "bucket": label,
+                    "bucket_lo": lo, "bucket_hi": hi,
+                    "ensemble_prob": round(prob, 4),
+                    "market_price": round(no_price, 4),
+                    "edge": round(no_edge, 4),
+                    "ensemble_mean": round(ensemble_mean, 2),
+                    "ensemble_std": round(ensemble_std, 2),
+                    "n_members": n_members,
+                    "n_models_agree": n_models_agree,
+                    "kelly_size_$": round(size, 2),
+                    "aggressive_window": aggressive,
+                })
+
+    return candidates, history_rows
+
+
+def main():
+    now = datetime.now(timezone.utc)
+    window = "AGGRESSIVE (post-model-run)" if in_aggressive_window() else "normal"
+    print(f"V3 Scan @ {now.isoformat()}  |  Window: {window}\n")
+
+    events = fetch_weather_events()
+    print(f"Found {len(events)} daily-high events in target cities:")
+    for e in events:
+        vol = float(e.get("volume") or 0)
+        print(f"  {e['_city']:8s} | {e.get('slug')} | vol=${vol:,.0f}")
+    print()
+
+    all_cands = []
+    all_history = []
+    for e in events:
+        try:
+            cands, hist = scan_event(e)
+            all_cands.extend(cands)
+            all_history.extend(hist)
+        except Exception as ex:
+            print(f"  skipped {e.get('slug')}: {ex}")
+
+    # Log forecast history EVERY scan, regardless of whether we found edges
+    if all_history:
+        hist_log = OUT / "forecast_history.csv"
+        hist_df = pd.DataFrame(all_history)
+        hist_df.to_csv(hist_log, mode="a", header=not hist_log.exists(), index=False)
+        print(f"Logged {len(all_history)} forecast snapshots -> {hist_log}")
+
+    if not all_cands:
+        print("No edge candidates this scan.")
+        return
+
+    df = pd.DataFrame(all_cands).sort_values(["direction", "edge"], ascending=[True, False])
+    yes_n = (df["direction"] == "YES").sum()
+    no_n = (df["direction"] == "NO").sum()
+    print("=" * 120)
+    print(f"{len(df)} CANDIDATES  ({yes_n} YES, {no_n} NO)")
+    print("=" * 120)
+
+    # Pretty-print key columns
+    display_cols = ["city", "bucket", "direction", "ensemble_prob", "market_price",
+                    "edge", "n_models_agree", "lead_hours", "kelly_size_$"]
+    print(df[display_cols].to_string(index=False))
+
+    log = OUT / "signals.csv"
+    df.to_csv(log, mode="a", header=not log.exists(), index=False)
+    print(f"Logged {len(df)} signals -> {log}")
+
+
+if __name__ == "__main__":
+    main()

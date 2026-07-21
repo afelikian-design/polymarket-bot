@@ -1,0 +1,489 @@
+"""
+PolyBot Paper Trader
+====================
+Runs after every scan_v3.py execution. Manages paper positions:
+  1. OPEN new positions from fresh signals (full Kelly, 10% bankroll cap)
+  2. UPDATE live unrealized P&L for open positions (fetch current market price)
+  3. CLOSE positions hit by stop-loss (-50% stake) or take-profit (price 2x entry)
+  4. Resolve positions at target_date noon UTC (via reconcile_v2 separately, but
+     this script also closes positions whose target_date has passed)
+
+Inputs:
+  - /root/polymarket-bot/weather/data/signals.csv (from scan_v3)
+  - Polymarket CLOB API (for current prices)
+
+Outputs:
+  - /root/polymarket-bot/weather/data/paper_positions.csv
+  - /root/polymarket-bot/weather/data/paper_trades.csv (closed trades)
+  - /root/polymarket-bot/weather/data/paper_bankroll.csv (balance over time)
+"""
+import os
+import csv
+import json
+import uuid
+import requests
+import pandas as pd
+from datetime import datetime, timezone
+from pathlib import Path
+
+DATA = Path("/root/polymarket-bot/weather/data")
+DATA.mkdir(exist_ok=True)
+
+SIGNALS_CSV   = DATA / "signals.csv"
+POSITIONS_CSV = DATA / "paper_positions.csv"
+TRADES_CSV    = DATA / "paper_trades.csv"
+BANKROLL_CSV  = DATA / "paper_bankroll.csv"
+
+# ── CONFIG ────────────────────────────────────────────────────────
+STARTING_BANKROLL   = 1000.0
+KELLY_FRACTION      = 1.0      # full Kelly
+MAX_BET_PCT         = 0.10     # cap at 10% of bankroll per trade
+ENTRY_SLIPPAGE_PCT  = 0.01     # pay 1% worse than quoted
+STOP_LOSS_PCT       = None     # DISABLED — binary markets shouldn't stop on intraday noise
+TAKE_PROFIT_MULT    = 2.0      # close if current_price >= entry_price * 2
+
+GAMMA = "https://gamma-api.polymarket.com"
+CLOB  = "https://clob.polymarket.com"
+
+# ── POSITION SCHEMA ───────────────────────────────────────────────
+POSITION_COLUMNS = [
+    "position_id", "opened_at", "closed_at",
+    "city", "event_slug", "market_slug", "condition_id",
+    "target_date", "bucket", "direction",
+    "ensemble_prob", "entry_price", "fill_price", "current_price",
+    "stake_usd", "shares",
+    "unrealized_pnl", "realized_pnl",
+    "status", "exit_reason",
+    "n_models_agree"
+]
+
+TRADE_COLUMNS = POSITION_COLUMNS  # same schema when closed
+
+
+def _read_csv(path, columns=None):
+    if not os.path.exists(path):
+        return []
+    try:
+        with open(path, newline="") as f:
+            rows = list(csv.DictReader(f))
+        return rows
+    except Exception:
+        return []
+
+
+def _write_csv(path, rows, columns):
+    with open(path, "w", newline="") as f:
+        w = csv.DictWriter(f, fieldnames=columns)
+        w.writeheader()
+        for r in rows:
+            # ensure every row has all columns
+            for c in columns:
+                if c not in r:
+                    r[c] = ""
+            w.writerow({k: r.get(k, "") for k in columns})
+
+
+def _append_csv(path, row, columns):
+    write_header = not os.path.exists(path)
+    with open(path, "a", newline="") as f:
+        w = csv.DictWriter(f, fieldnames=columns)
+        if write_header:
+            w.writeheader()
+        for c in columns:
+            if c not in row:
+                row[c] = ""
+        w.writerow({k: row.get(k, "") for k in columns})
+
+
+def _fnum(v, default=0.0):
+    try:
+        return float(v) if v not in (None, "", "None") else default
+    except (ValueError, TypeError):
+        return default
+
+
+# ── KELLY ─────────────────────────────────────────────────────────
+def kelly_size(p, price, bankroll,
+               fraction=KELLY_FRACTION,
+               cap_pct=MAX_BET_PCT):
+    """Return $ to stake given probability p of winning at offered price."""
+    if price <= 0 or price >= 1 or p <= 0 or p >= 1:
+        return 0.0
+    b = (1 - price) / price
+    q = 1 - p
+    edge = (b * p - q) / b
+    if edge <= 0:
+        return 0.0
+    f_stake = min(fraction * edge, cap_pct)
+    return max(0.0, bankroll * f_stake)
+
+
+# ── MARKET PRICE LOOKUP ───────────────────────────────────────────
+def fetch_current_price(condition_id, direction):
+    """Fetch live YES or NO price for a condition_id from Polymarket CLOB."""
+    if not condition_id:
+        return None
+    try:
+        r = requests.get(f"{CLOB}/markets/{condition_id}", timeout=8)
+        if r.status_code == 200:
+            tokens = r.json().get("tokens", [])
+            if tokens:
+                yes_price = float(tokens[0].get("price", 0.5))
+                return yes_price if direction == "YES" else round(1 - yes_price, 4)
+    except Exception:
+        pass
+    return None
+
+
+def fetch_condition_id(event_slug, bucket_label):
+    """Resolve event_slug + bucket_label -> condition_id via Gamma /events."""
+    try:
+        r = requests.get(f"{GAMMA}/events",
+                         params={"slug": event_slug}, timeout=12)
+        if r.status_code != 200:
+            return None
+        events = r.json()
+        if not events:
+            return None
+        for m in events[0].get("markets", []):
+            if (m.get("groupItemTitle") or "").strip() == bucket_label.strip():
+                return m.get("conditionId")
+    except Exception:
+        pass
+    return None
+
+
+# ── BANKROLL ──────────────────────────────────────────────────────
+def current_bankroll(positions):
+    """Bankroll = starting + realized P&L - stakes tied up in open positions."""
+    closed = [p for p in positions if p.get("status") == "CLOSED"]
+    open_  = [p for p in positions if p.get("status") == "OPEN"]
+    realized = sum(_fnum(p.get("realized_pnl")) for p in closed)
+    open_stakes = sum(_fnum(p.get("stake_usd")) for p in open_)
+    cash = STARTING_BANKROLL + realized - open_stakes
+    # Equity = cash + value of open positions at current market
+    open_equity = sum(
+        _fnum(p.get("shares")) * _fnum(p.get("current_price"))
+        for p in open_
+    )
+    equity = cash + open_equity
+    return round(cash, 2), round(equity, 2), round(realized, 2)
+
+
+def log_bankroll(cash, equity, realized, open_count):
+    row = {
+        "ts": datetime.now(timezone.utc).isoformat(),
+        "cash": cash,
+        "equity": equity,
+        "realized_pnl": realized,
+        "open_positions": open_count,
+    }
+    _append_csv(BANKROLL_CSV, row,
+                ["ts", "cash", "equity", "realized_pnl", "open_positions"])
+
+
+# ── OPEN POSITIONS FROM FRESH SIGNALS ─────────────────────────────
+def open_new_positions(positions):
+    """Read signals.csv, open positions for buckets we don't already hold.
+
+       Dedupe rule: at most ONE open position per (city, target_date, bucket,
+       direction). If we already have an open position on that bucket, skip
+       any signal matching it. Once a position closes (resolution, stop-loss,
+       or take-profit), the bucket becomes eligible for new signals again.
+    """
+    signals = _read_csv(SIGNALS_CSV)
+    if not signals:
+        return positions, 0
+
+    # Bucket-level occupancy: only OPEN positions count
+    occupied = {
+        (p.get("city", ""), p.get("target_date", ""),
+         p.get("bucket", ""), p.get("direction", ""))
+        for p in positions if p.get("status") == "OPEN"
+    }
+
+    # For full-history traceability: also track every position_id ever created
+    # (prevents reopening a position with the exact same signal ts after its
+    # scan_v3 entry has been duplicated — a defensive dedupe)
+    existing_ids = {p["position_id"] for p in positions}
+
+    cash, _, _ = current_bankroll(positions)
+    opened = 0
+
+    for s in signals:
+        # Skip stale signals — markets resolve at noon UTC on target_date.
+        # If target_date is before today (UTC), the market is settled.
+        sig_target = s.get("target_date", "")
+        if sig_target and sig_target < datetime.now(timezone.utc).date().isoformat():
+            continue
+        bucket_key = (
+            s.get("city", ""), s.get("target_date", ""),
+            s.get("bucket", ""), s.get("direction", "")
+        )
+        # Skip if we already hold an open position on this bucket
+        if bucket_key in occupied:
+            continue
+
+        # Unique position_id (keep ts for traceability)
+        sid = "{}__{}__{}__{}".format(
+            s.get("ts", ""), s.get("market_slug", ""),
+            s.get("bucket", ""), s.get("direction", "")
+        )
+        if sid in existing_ids:
+            continue
+
+        # Sizing — compute p_win based on direction
+        ensemble_prob = _fnum(s.get("ensemble_prob"))
+        quoted_price = _fnum(s.get("market_price"))
+        direction = (s.get("direction") or "").upper()
+
+        # For YES trades: we win if the bucket hits → p_win = ensemble_prob
+        # For NO  trades: we win if the bucket DOESN'T hit → p_win = 1 - ensemble_prob
+        if direction == "NO":
+            p_win = 1.0 - ensemble_prob
+        else:
+            p_win = ensemble_prob
+
+        # Clamp p_win to avoid Kelly edge-case blowups (1.0 -> infinite leverage)
+        p_win = min(max(p_win, 0.0), 0.99)
+
+        if quoted_price <= 0 or quoted_price >= 1:
+            continue
+        if p_win <= 0:
+            continue
+
+        # Fetch condition_id FIRST — we need it to get live price for fill
+        cid = fetch_condition_id(s.get("event_slug", ""), s.get("bucket", ""))
+        if not cid:
+            # Can't find market on Polymarket, skip
+            continue
+
+        # Fetch LIVE price right now — don't trust signal's stale market_price
+        live_price = fetch_current_price(cid, direction)
+        if live_price is None:
+            # API failed, skip this signal rather than open at stale price
+            continue
+
+        # Skip if market has already resolved (live price at extreme)
+        if live_price <= 0.02 or live_price >= 0.98:
+            continue
+
+        # Require live price to be within the strategy's valid band
+        # (NO_MAX_YES_PRICE / YES_MAX_PRICE are the signal-side thresholds;
+        # if live has drifted outside those, the edge is gone.)
+        if live_price >= 0.99 or live_price <= 0.01:
+            continue
+
+        # Use the LIVE price for sizing, not the stale signal price
+        actual_price = live_price
+
+        # Re-check p_win > 0 and edge still exists before sizing
+        # (recompute effective edge at live price)
+        if direction == "NO":
+            # For NO: live_price is the NO price; edge = p_win - live_price
+            effective_edge = p_win - actual_price
+        else:
+            effective_edge = p_win - actual_price
+
+        # Require at least 3pp edge at live price (signal may have had 8pp+
+        # at old price; price drift may have collapsed it)
+        if effective_edge < 0.03:
+            continue
+
+        # Kelly based on live price, not stale signal price
+        stake = kelly_size(p_win, actual_price, cash)
+        if stake < 1.0:
+            continue
+
+        # Apply 1% slippage on top of the live price
+        fill_price = min(0.99, actual_price * (1 + ENTRY_SLIPPAGE_PCT))
+        shares = stake / fill_price
+
+        position = {
+            "position_id":    sid,
+            "opened_at":      datetime.now(timezone.utc).isoformat(),
+            "closed_at":      "",
+            "city":           s.get("city", ""),
+            "event_slug":     s.get("event_slug", ""),
+            "market_slug":    s.get("market_slug", ""),
+            "condition_id":   cid or "",
+            "target_date":    s.get("target_date", ""),
+            "bucket":         s.get("bucket", ""),
+            "direction":      s.get("direction", ""),
+            "ensemble_prob":  round(ensemble_prob, 4),
+            "entry_price":    round(quoted_price, 4),
+            "fill_price":     round(fill_price, 4),
+            "current_price":  round(fill_price, 4),  # initially same as fill
+            "stake_usd":      round(stake, 2),
+            "shares":         round(shares, 4),
+            "unrealized_pnl": 0.0,
+            "realized_pnl":   "",
+            "status":         "OPEN",
+            "exit_reason":    "",
+            "n_models_agree": s.get("n_models_agree", ""),
+        }
+        positions.append(position)
+        existing_ids.add(sid)
+        occupied.add(bucket_key)   # prevent opening another position on same bucket in this scan
+        cash -= stake  # update available cash for next signal
+        opened += 1
+
+    return positions, opened
+
+
+# ── UPDATE LIVE PRICES + CHECK STOP/TARGET ────────────────────────
+def update_open_positions(positions):
+    """For each open position: fetch current price, update unrealized P&L,
+       check stop-loss and take-profit triggers, close if triggered."""
+    closed_count = 0
+    updated = 0
+
+    for p in positions:
+        if p.get("status") != "OPEN":
+            continue
+
+        cid = p.get("condition_id", "")
+        if not cid:
+            # Try to re-resolve condition_id if we missed it at open time
+            cid = fetch_condition_id(p.get("event_slug", ""), p.get("bucket", ""))
+            if cid:
+                p["condition_id"] = cid
+
+        if not cid:
+            continue  # can't look it up, leave as-is
+
+        price = fetch_current_price(cid, p.get("direction", "YES"))
+        if price is None:
+            continue
+
+        fill = _fnum(p.get("fill_price"))
+        shares = _fnum(p.get("shares"))
+        stake = _fnum(p.get("stake_usd"))
+
+        # Mark-to-market: value now = shares * current_price
+        current_value = shares * price
+        unrealized = current_value - stake  # what you'd make if you closed now
+
+        p["current_price"] = round(price, 4)
+        p["unrealized_pnl"] = round(unrealized, 2)
+        updated += 1
+
+        # STOP-LOSS DISABLED — binary resolution markets get wicked out by intraday
+        # noise. Hold to resolution; the actual weather observation is the only
+        # exit that matters. (Kept TAKE_PROFIT to lock in cases where market
+        # already prices our thesis at >2x entry.)
+
+        # TAKE PROFIT — when current price >= fill_price * TAKE_PROFIT_MULT
+        if fill > 0 and price >= fill * TAKE_PROFIT_MULT:
+            p["status"] = "CLOSED"
+            p["closed_at"] = datetime.now(timezone.utc).isoformat()
+            p["exit_reason"] = "TAKE_PROFIT"
+            p["realized_pnl"] = round(unrealized, 2)
+            closed_count += 1
+            continue
+
+        # NEAR-RESOLUTION TAKE PROFIT — capture late-stage winners that
+        # won't reach 2x because they entered at high prices (e.g. NO bets
+        # at $0.65 climbing to $0.95). Fires when within 6h of resolution
+        # AND price has moved at least 30% in our favor.
+        try:
+            td = datetime.fromisoformat(p.get("target_date", "")).date()
+            res_dt = datetime.combine(td, datetime.min.time(), tzinfo=timezone.utc).replace(hour=12)
+            hours_to_res = (res_dt - datetime.now(timezone.utc)).total_seconds() / 3600
+        except Exception:
+            hours_to_res = 999
+        if (fill > 0 and 0 < hours_to_res < 6
+                and price >= fill * 1.30
+                and price >= 0.85):  # price near 1.0 = high resolution confidence
+            p["status"] = "CLOSED"
+            p["closed_at"] = datetime.now(timezone.utc).isoformat()
+            p["exit_reason"] = "NEAR_RES_TP"
+            p["realized_pnl"] = round(unrealized, 2)
+            closed_count += 1
+
+    return positions, updated, closed_count
+
+
+# ── RESOLVE EXPIRED POSITIONS (resolution-by-time) ────────────────
+def resolve_expired_positions(positions):
+    """If target_date has passed and position still open, close it at
+       current_price. Reconcile_v2.py handles the actual P&L correctly
+       using observed temperature, but we still need to close the position
+       in the paper book so it stops appearing as open."""
+    today_utc = datetime.now(timezone.utc).date()
+    resolved = 0
+
+    for p in positions:
+        if p.get("status") != "OPEN":
+            continue
+        try:
+            td = datetime.fromisoformat(p.get("target_date", "")).date()
+        except Exception:
+            continue
+
+        if td < today_utc:
+            # Resolve: at this point the bucket outcome is determined.
+            # Current price should be 0.01 (definitively lost) or 0.99 (definitively won)
+            # reconcile_v2 writes the authoritative result later. For now we
+            # close at mark-to-market using whatever the CLOB says now.
+            fill = _fnum(p.get("fill_price"))
+            shares = _fnum(p.get("shares"))
+            stake = _fnum(p.get("stake_usd"))
+            current = _fnum(p.get("current_price"))
+            realized = shares * current - stake
+
+            p["status"] = "CLOSED"
+            p["closed_at"] = datetime.now(timezone.utc).isoformat()
+            p["exit_reason"] = "RESOLVED"
+            p["realized_pnl"] = round(realized, 2)
+            resolved += 1
+
+    return positions, resolved
+
+
+# ── MAIN ──────────────────────────────────────────────────────────
+def main():
+    print(f"PaperTrader @ {datetime.now(timezone.utc).isoformat()}")
+
+    # Load existing positions
+    positions = _read_csv(POSITIONS_CSV, POSITION_COLUMNS)
+
+    # 1. Open new positions
+    positions, opened = open_new_positions(positions)
+    print(f"  Opened {opened} new positions from signals")
+
+    # 2. Update live prices + check stops/targets
+    positions, updated, early_closed = update_open_positions(positions)
+    print(f"  Updated {updated} open positions  |  early closed: {early_closed}")
+
+    # 3. Resolve expired positions (target_date < today)
+    positions, resolved = resolve_expired_positions(positions)
+    print(f"  Resolved {resolved} expired positions")
+
+    # 4. Split closed into trades log (append-only) and keep open in positions
+    closed_now = [p for p in positions if p.get("status") == "CLOSED" and p.get("closed_at")]
+    open_positions = [p for p in positions if p.get("status") == "OPEN"]
+
+    # Migrate newly-closed ones to trades.csv
+    existing_trades = _read_csv(TRADES_CSV, TRADE_COLUMNS)
+    existing_trade_ids = {t["position_id"] for t in existing_trades}
+
+    new_trades = [c for c in closed_now if c["position_id"] not in existing_trade_ids]
+    if new_trades:
+        all_trades = existing_trades + new_trades
+        _write_csv(TRADES_CSV, all_trades, TRADE_COLUMNS)
+        print(f"  Migrated {len(new_trades)} closed trades to paper_trades.csv")
+
+    # Rewrite positions.csv with open positions ONLY + keep closed ones for history
+    # Actually keep both — dashboard may want to query closed_at from same table
+    _write_csv(POSITIONS_CSV, positions, POSITION_COLUMNS)
+
+    # 5. Snapshot bankroll
+    cash, equity, realized = current_bankroll(positions)
+    log_bankroll(cash, equity, realized, len(open_positions))
+    print(f"  Cash: ${cash:,.2f}  |  Equity: ${equity:,.2f}  |  Realized: ${realized:,.2f}")
+    print(f"  Open: {len(open_positions)}  Closed total: {sum(1 for p in positions if p.get('status')=='CLOSED')}")
+
+
+if __name__ == "__main__":
+    main()
